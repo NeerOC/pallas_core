@@ -100,7 +100,7 @@ local function BeastMasteryCombat()
     use_aoe = nearby_target > AOE_COUNT
   end
 
-  -- ── Priority list (matches MoP 5.4.8 BM guide) ──────────────
+  -- ── Priority list (matches MoP 5.5.3 BM guide) ──────────────
 
   -- 1. Maintain Hunter's Mark
   if not target:HasAura("Hunter's Mark") then

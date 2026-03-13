@@ -78,7 +78,9 @@ function SpellWrapper:InRange(target)
   if not ok or not info then return true end
   local max_range = info.max_range or 0
   if max_range < 0.1 then return Me and Me:InMeleeRange(target) or false end
-  return Me and Me:GetDistance(target) <= max_range or false
+  local d = Me and Me:GetDistance(target) or -1
+  if d < 0 then return true end  -- unknown distance: assume in range, let server reject
+  return d <= max_range
 end
 
 --- Low-level cast.  Uses cast_spell_at_unit(id, obj_ptr, {ground=1}) which

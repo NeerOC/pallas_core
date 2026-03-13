@@ -104,14 +104,30 @@ end
 
 function Unit:GetDistance(other)
   if not other then return 999 end
-  if not self.Position or not other.Position then return 999 end
-  return game.distance(
-    self.Position.x, self.Position.y, self.Position.z,
-    other.Position.x, other.Position.y, other.Position.z)
+
+  local sp = self.Position
+  local op = other.Position
+
+  -- Live fallback: position is nil out of combat for non-player entities.
+  -- Query the archetype data directly which may succeed even when the
+  -- snapshot didn't populate position (e.g. freshly entered combat).
+  if not sp and self.obj_ptr then
+    local ok, x, y, z = pcall(game.entity_position, self.obj_ptr)
+    if ok and x then sp = { x = x, y = y, z = z }; self.Position = sp end
+  end
+  if not op and other.obj_ptr then
+    local ok, x, y, z = pcall(game.entity_position, other.obj_ptr)
+    if ok and x then op = { x = x, y = y, z = z }; other.Position = op end
+  end
+
+  if not sp or not op then return -1 end
+  return game.distance(sp.x, sp.y, sp.z, op.x, op.y, op.z)
 end
 
 function Unit:InMeleeRange(other)
-  return self:GetDistance(other) <= 5.5
+  local d = self:GetDistance(other)
+  if d < 0 then return true end  -- unknown distance: assume in range
+  return d <= 5.5
 end
 
 function Unit:IsFacing(other, threshold)
@@ -212,11 +228,23 @@ function Unit:CastingInfo()
 end
 
 -- Resolve the unit's target (returns a Unit wrapper or nil).
--- For the local player, uses game.target() directly — no OM scan needed.
+-- For the local player, uses game.target() to get the GUID/obj_ptr,
+-- then looks up the full entity from the OM cache so we get position,
+-- facing, auras, health, etc.  Falls back to the bare target table
+-- if the entity isn't in the cache (e.g. cross-phase).
 function Unit:GetTarget()
   if Me and self.Guid == Me.Guid then
     local ok, tgt = pcall(game.target)
     if not ok or not tgt or not tgt.obj_ptr then return nil end
+
+    -- Look up full entity data from the OM snapshot
+    local entities = Pallas and Pallas._entity_cache or {}
+    for _, e in ipairs(entities) do
+      if e.obj_ptr == tgt.obj_ptr then
+        return Unit:New(e)
+      end
+    end
+
     return Unit:New(tgt)
   end
   return nil
