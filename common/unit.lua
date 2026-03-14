@@ -149,6 +149,15 @@ function Unit:GetDistance(other)
 end
 
 function Unit:InMeleeRange(other)
+  -- Use native spell range check for melee when checking between Me and another unit
+  if self == Me and game.is_spell_in_range and other and other.obj_ptr then
+    local ok, val = pcall(game.is_spell_in_range, 6603, other.obj_ptr) -- 6603 = basic attack
+    if ok and val ~= nil then
+      return val == 1
+    end
+  end
+
+  -- Fallback to distance-based check
   local d = self:GetDistance(other)
   if d < 0 then return true end  -- unknown distance: assume in range
   return d <= 5.5

@@ -44,12 +44,13 @@ local function DoHeal()
     return
   end
 
-  if lowest.HealthPct < 90 and Spell.SoothingMist:CastEx(lowest) then
-    return
+  -- Since Soothing mist initial heal is instant we can instant cancel for quicker reload.
+  if Me.ChannelingSpellId == 115175 then -- Soothing Mist
+    Me:StopCasting()
   end
 
-  if not lowest or lowest.HealthPct > 98 and Me:IsCastingOrChanneling() then
-    Me:StopCasting()
+  if lowest.HealthPct < 80 and Spell.SoothingMist:CastEx(lowest) then
+    return
   end
 end
 
