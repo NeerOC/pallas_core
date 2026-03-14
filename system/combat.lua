@@ -3,7 +3,7 @@
 -- Collects enemy units each tick, filters, and ranks them by priority.
 -- Behaviors read Combat.BestTarget and Combat.EnemiesInMeleeRange.
 
-Combat = Combat or Targeting:New()
+Combat                     = Combat or Targeting:New()
 
 Combat.BestTarget          = nil
 Combat.EnemiesInMeleeRange = 0
@@ -30,7 +30,7 @@ end
 function Combat:CollectTargets()
   if not Me.InCombat and PallasSettings.PallasAttackOOC then
     local tgt = Me.Target
-    if tgt and not tgt.IsDead then
+    if tgt and not tgt.IsDead and Me:CanAttack(tgt) then
       self.Targets[#self.Targets + 1] = tgt
     end
     return
@@ -52,13 +52,14 @@ function Combat:CollectTargets()
     if eu.is_dead then goto skip end
     if eu.health and eu.health <= 0 then goto skip end
     if not eu.in_combat and not PallasSettings.PallasAttackOOC then goto skip end
+    if not Me:CanAttack(eu) then goto skip end
 
     -- Cheap squared-distance check (40yd = 1600 sq)
     if mx and e.position then
       local dx = mx - e.position.x
       local dy = my - e.position.y
       local dz = mz - e.position.z
-      if dx*dx + dy*dy + dz*dz > 1600 then goto skip end
+      if dx * dx + dy * dy + dz * dz > 1600 then goto skip end
     end
 
     self.Targets[#self.Targets + 1] = Unit:New(e)
@@ -107,7 +108,7 @@ function Combat:InclusionFilter()
     if u.Guid == tgt.Guid then return end
   end
 
-  if tgt.IsDead or tgt.Health <= 0 then return end
+  if tgt.IsDead or tgt.Health <= 0 or not Me:CanAttack(tgt) then return end
   self.Targets[#self.Targets + 1] = tgt
 end
 
