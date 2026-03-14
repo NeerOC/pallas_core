@@ -93,10 +93,11 @@ local function load_modules()
   include("common/targeting.lua")
 
   local UnitMod = include("common/unit.lua")
-  local PlayerMod = include("common/player.lua")
   if UnitMod then
     Unit = UnitMod
   end
+
+  local PlayerMod = include("common/player.lua")
   if PlayerMod then
     Player = PlayerMod
   end
