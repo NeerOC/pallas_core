@@ -1,24 +1,26 @@
 local options = {
-  Name = "Monk (Mistweaver)", -- shown as collapsing header
+    Name = "Monk (Mistweaver)", -- shown as collapsing header
 
-  Widgets = {
-    { type = "text", text = "=== General ===" },
-  },
+    Widgets = {{type = "text", text = "=== General ==="}}
 }
 
-local auras = {
-  tiger_palm = 125359
-}
+local auras = {tiger_palm = 125359}
 
 local function DoCombat()
-  local target = Combat.BestTarget
-  if not target then return end
-  if not Me:InMeleeRange(target) then return end
+    local target = Combat.BestTarget
+    if not target then return end
+    if not Me:InMeleeRange(target) then return end
 
-  if not Me:HasAura(auras.tiger_palm) and Spell.TigerPalm:CastEx(target) then return end
-  if Spell.BlackoutKick:CastEx(target) then return end
-  if Spell.Jab:CastEx(target) then return end
-  if Spell.TigerPalm:CastEx(target) then return end
+    Spell.AutoAttack:CastEx(target)
+
+    if Spell:IsGCDActive() then return end
+    if not Me:HasAura(auras.tiger_palm) and Spell.TigerPalm:CastEx(target) then
+        return
+    end
+
+    if Spell.BlackoutKick:CastEx(target) then return end
+    if Spell.Jab:CastEx(target) then return end
+    if Spell.TigerPalm:CastEx(target) then return end
 end
 
 -- Heal logic (optional) — called every tick while the heal system runs.
@@ -29,9 +31,9 @@ end
 -- end
 
 local behaviors = {
-  [BehaviorType.Combat] = DoCombat,
-  -- [BehaviorType.Heal] = DoHeal,
-  -- [BehaviorType.Tank] = DoTank,
+    [BehaviorType.Combat] = DoCombat
+    -- [BehaviorType.Heal] = DoHeal,
+    -- [BehaviorType.Tank] = DoTank,
 }
 
-return { Options = options, Behaviors = behaviors }
+return {Options = options, Behaviors = behaviors}
