@@ -193,6 +193,15 @@ function SpellWrapper:CastEx(target, skipusable, skipfacing)
     end
   end
 
+  -- Cooldown check: avoid calling Cast when the spell is clearly on CD.
+  -- is_usable_spell doesn't check cooldowns (e.g. Horn of Winter has no
+  -- resource cost → always "usable" even when on CD).
+  -- Don't throttle the tick — other spells may still be castable.
+  local cok, cd = pcall(game.spell_cooldown, self.Id)
+  if cok and cd and cd.on_cooldown then
+    return false
+  end
+
   -- Range check: skip if target is out of spell range
   if target and target ~= Me and not self:InRange(target) then
     return false
@@ -252,6 +261,18 @@ function SpellWrapper:CastAtPos(x_or_entity, y, z)
 
   local now = os.clock()
   if now < self._fail_until or now < self._cast_until then
+    return false
+  end
+
+  -- Usability + cooldown: CastAtPos was missing these entirely, causing
+  -- ground-targeted spells (DnD) to call game.cast_at_pos every tick
+  -- even when on CD or not usable.
+  local uok, usable = pcall(game.is_usable_spell, self.Id)
+  if uok and not usable then
+    return false
+  end
+  local cok, cd = pcall(game.spell_cooldown, self.Id)
+  if cok and cd and cd.on_cooldown then
     return false
   end
 

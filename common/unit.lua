@@ -50,6 +50,11 @@ function Unit:New(entity)
     ChannelingSpellName = u.channeling_spell_name or "",
     Auras = u.auras or {},
 
+    -- Melee range fields (from CGUnit descriptors)
+    BoundingRadius = u.bounding_radius or 0,
+    CombatReach    = u.combat_reach or 0,
+    UnitFlags3     = u.unit_flags3 or 0,
+
     -- Specialization (active player only, from GetSpecialization game func)
     SpecId = u.spec_id or 0, -- 1-based index (1-4), 0 = unknown
     SpecName = u.spec_name or "", -- e.g. "Fury", "Holy", "Restoration"
@@ -253,6 +258,19 @@ function Unit:IsFacing(other, threshold)
 end
 
 function Unit:HasAura(name_or_id)
+  local auras = self.Auras
+  if auras then
+    local is_id = type(name_or_id) == "number"
+    for i = 1, #auras do
+      local a = auras[i]
+      if is_id then
+        if a.spell_id == name_or_id then return true end
+      else
+        if a.name == name_or_id then return true end
+      end
+    end
+    return false
+  end
   local ok, result = pcall(game.has_aura, self.obj_ptr, name_or_id)
   return ok and result or false
 end
