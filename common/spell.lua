@@ -108,7 +108,32 @@ function SpellWrapper:InRange(target)
   if game.is_spell_in_range and target.obj_ptr then
     local ok, val = pcall(game.is_spell_in_range, self.Id, target.obj_ptr)
     if ok and val ~= nil then
-      return val == 1
+      if val == 1 then return true end
+
+      -- val == 0: game says out of range. For short-range spells (<=8yd),
+      -- is_spell_in_range uses center-to-center distance and ignores hitbox
+      -- size, giving false negatives on large models. Override using bbox
+      -- edge-to-edge distance: subtract the target's model half-width.
+      if val == 0 and Me and Me.Position and target.Position then
+        local mr = self._max_range
+        if not mr then
+          local iok, info = pcall(game.get_spell_info, self.Id)
+          mr = (iok and info) and (info.max_range or 0) or 0
+          self._max_range = mr
+        end
+        if mr > 0 and mr <= 8 then
+          local dx = Me.Position.x - target.Position.x
+          local dy = Me.Position.y - target.Position.y
+          local dz = Me.Position.z - target.Position.z
+          local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+          local bbox_r = 0
+          local bok, bb = pcall(game.entity_bounds, target.obj_ptr)
+          if bok and bb then bbox_r = bb.width * 0.5 end
+          return (dist - bbox_r) <= mr
+        end
+      end
+
+      return false
     end
     -- nil = spell has no range component; fall through to melee/distance check
   end
@@ -202,7 +227,7 @@ function SpellWrapper:CastEx(target, skipusable, skipfacing)
     return false
   end
 
-  -- Range check: skip if target is out of spell range
+  -- Range check: skip if target is out of spell range.
   if target and target ~= Me and not self:InRange(target) then
     return false
   end
