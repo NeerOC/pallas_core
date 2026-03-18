@@ -48,8 +48,9 @@ local function DoCombat()
 end
 
 local function DoHeal()
+  local lowest = Heal:GetLowestMember()
   -- Since Soothing mist initial heal is instant we can instant cancel for quicker reload.
-  if Me.ChannelingSpellId == 115175 then -- Soothing Mist
+  if Me.ChannelingSpellId == 115175 and (not lowest or lowest.HealthPct >= 95) then -- Soothing Mist
     Me:StopCasting()
   end
 
@@ -57,12 +58,16 @@ local function DoHeal()
     return
   end
 
-  local lowest = Heal:GetLowestMember()
   if not lowest then
     return
   end
 
-  if lowest.HealthPct < 90 and Spell.SoothingMist:CastEx(lowest, false, true) then
+  if lowest.HealthPct < 60 and Spell.EnvelopingMist:CastEx(lowest) then
+    print("Casted Mist")
+    return
+  end
+
+  if lowest.HealthPct < 70 and Spell.SoothingMist:CastEx(lowest, false, true) then
     return
   end
 end

@@ -22,6 +22,10 @@ local function DoCombat()
     return
   end
 
+  if Me.HealthPct < 70 and Spell.Guard:CastEx(Me) then
+    return
+  end
+
   if Spell:IsGCDActive() then
     return
   end
