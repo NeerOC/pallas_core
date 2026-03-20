@@ -169,6 +169,36 @@ function Menu:Draw()
     if ch4 then PallasSettings.PallasESP = v4 end
   end
 
+  if imgui.collapsing_header("Interrupts") then
+    -- Interrupt mode combobox
+    if PallasSettings.PallasInterruptMode == nil then PallasSettings.PallasInterruptMode = 0 end
+    local mode_options = { "All", "Whitelist", "None" }
+    local cur_mode = PallasSettings.PallasInterruptMode or 0
+    local preview = mode_options[cur_mode + 1] or "All"
+    if imgui.begin_combo("Interrupt Mode##pallas_interrupt_mode", preview) then
+      for i, opt in ipairs(mode_options) do
+        local sel = (i - 1 == cur_mode)
+        if imgui.selectable(opt .. "##interrupt_mode" .. i, sel) then
+          PallasSettings.PallasInterruptMode = i - 1
+        end
+      end
+      imgui.end_combo()
+    end
+
+    -- Advanced timing options
+    if PallasSettings.PallasInterruptTiming == nil then PallasSettings.PallasInterruptTiming = false end
+    local timing_changed, timing_val = imgui.checkbox("Enable Advanced Timing##pallas_timing", PallasSettings.PallasInterruptTiming)
+    if timing_changed then PallasSettings.PallasInterruptTiming = timing_val end
+
+    if PallasSettings.PallasInterruptTiming then
+      if PallasSettings.PallasInterruptPercentage == nil then PallasSettings.PallasInterruptPercentage = 80 end
+      local pct_changed, pct_val = imgui.slider_int("Interrupt at %##pallas_interrupt_pct", PallasSettings.PallasInterruptPercentage, 10, 95)
+      if pct_changed then PallasSettings.PallasInterruptPercentage = pct_val end
+      imgui.text("Interrupts casts when ≤" .. (PallasSettings.PallasInterruptPercentage or 80) .. "% complete")
+      imgui.text("Channels interrupted after random delay (700ms ± 400ms)")
+    end
+  end
+
   -- ── Spec selector (manual override) ────────────────────────────
   if Me and Me._spec_options then
     if imgui.collapsing_header("Specialization") then
