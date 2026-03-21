@@ -310,6 +310,16 @@ function Unit:IsWorldBoss()
   return self.Classification == 3
 end
 
+--- True if the unit is boss-level (game level == -1 / skull).
+--- Falls back to classification == 3 (worldboss) if is_boss field is unavailable.
+function Unit:IsBoss()
+  local data = self._data
+  if data and data.is_boss ~= nil then
+    return data.is_boss
+  end
+  return self.Classification == 3
+end
+
 function Unit:IsLootable()
   return self._is_lootable
 end
