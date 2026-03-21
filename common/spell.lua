@@ -135,6 +135,17 @@ function SpellWrapper:IsCurrentSpell()
   return ok and val or false
 end
 
+function SpellWrapper:IsAutoRepeat()
+  if self.Id == 0 then
+    return false
+  end
+  if not game.is_auto_repeat_spell then
+    return false
+  end
+  local ok, val = pcall(game.is_auto_repeat_spell, self.Id)
+  return ok and val or false
+end
+
 --- Low-level cast.  Uses cast_spell_at_unit(id, obj_ptr, {ground=1}) which
 --- resolves the 128-bit GUID from obj_ptr in C++, bypassing Lua double
 --- precision issues with 64-bit GUID halves.  Returns the raw integer
