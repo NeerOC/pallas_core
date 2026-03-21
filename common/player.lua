@@ -38,6 +38,23 @@ function Player:StopCasting()
   game.stop_casting()
 end
 
+-- Set the current target to a unit
+---@param target Unit - The unit to target
+---@return boolean - true if the target was set successfully
+function Player:SetTarget(target)
+  if not target or not target.obj_ptr then
+    return false
+  end
+  local ok, result = pcall(game.set_target, target.obj_ptr)
+  return ok and result or false
+end
+
+-- Clear the current target
+---@return void
+function Player:ClearTarget()
+  pcall(game.clear_target)
+end
+
 -- Start auto-attacking a target
 ---@param target Unit - The target to attack
 ---@return boolean - true if the attack was started, false otherwise
