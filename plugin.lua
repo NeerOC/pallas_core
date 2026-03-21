@@ -71,6 +71,8 @@ local CORE_DEFAULTS = {
   PallasInterruptMode = 0, -- 0=All (filtered by interrupts.lua), 1=Whitelist (same as All), 2=None
   PallasInterruptTiming = false, -- Enable advanced timing logic
   PallasInterruptPercentage = 80, -- Interrupt when cast is <= 80% complete
+  PallasPaused       = false, -- Behavior pause state
+  PallasPauseKey     = 580, -- ImGuiKey_F9 default
 }
 
 local function load_settings()
@@ -229,6 +231,16 @@ function Plugin.onTick()
     end
   end
 
+  -- Check for pause key press to toggle behavior pulses
+  if imgui.is_key_pressed(PallasSettings.PallasPauseKey or 580) then
+    PallasSettings.PallasPaused = not PallasSettings.PallasPaused
+    if PallasSettings.PallasPaused then
+      print("[Pallas] Behaviors paused")
+    else
+      print("[Pallas] Behaviors resumed")
+    end
+  end
+
   if not PallasSettings.PallasEnabled then return end
 
   -- Rate-limit the entire tick body.  At 300fps only ~20 of those frames
@@ -239,7 +251,7 @@ function Plugin.onTick()
 
   Pallas._tick_throttled = false
 
-  -- Refresh world state (OM read + player + target)
+  -- Refresh world state (OM read + player + target) - always update even when paused
   refresh_entities()
   refresh_me()
   if not Me then return end
@@ -259,13 +271,16 @@ function Plugin.onTick()
     Spell:UpdateCache()
   end
 
-  -- Run the targeting pipelines
-  Combat:Update()
-  Heal:Update()
-  Tank:Update()
+  -- Only run targeting and behaviors if not paused
+  if not PallasSettings.PallasPaused then
+    -- Run the targeting pipelines
+    Combat:Update()
+    Heal:Update()
+    Tank:Update()
 
-  -- Dispatch all behavior functions
-  Behavior:Update()
+    -- Dispatch all behavior functions
+    Behavior:Update()
+  end
 
   -- Periodic settings save (every ~5 seconds)
   if now - save_cooldown > 5 then
@@ -280,8 +295,20 @@ local COL_TARGET  = imgui.color_u32(1.0, 1.0, 0.0, 1.0)   -- yellow
 local COL_ENEMY   = imgui.color_u32(1.0, 0.2, 0.2, 1.0)   -- red
 local COL_GREEN   = imgui.color_u32(0.3, 1.0, 0.3, 1.0)   -- green
 local COL_GREY    = imgui.color_u32(0.7, 0.7, 0.7, 0.9)   -- grey
+local COL_WHITE   = imgui.color_u32(1.0, 1.0, 1.0, 1.0)   -- white
 
 local function draw_esp()
+  -- Draw "Behavior Disabled" text at character position when paused (even if ESP is disabled)
+  if PallasSettings.PallasPaused then
+    if Me and Me.Position then
+      local sx, sy = game.world_to_screen(Me.Position.x, Me.Position.y, Me.Position.z + 2.0)
+      if sx then
+        imgui.draw_text(sx - 80, sy - 10, COL_WHITE, "Behavior Disabled")
+      end
+    end
+    return -- Don't draw other ESP elements when paused
+  end
+
   if not PallasSettings.PallasESP then return end
   if not Me or not Me.Position then return end
 

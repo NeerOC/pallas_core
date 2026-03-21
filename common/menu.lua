@@ -10,6 +10,15 @@
 --   { type = "combobox", uid = "UID", text = "Label", default = 0, options = {"A","B"} }
 --   { type = "text",     text = "Some header text" }
 
+local ImGuiKeys = Pallas.include("data/imgui_keys.lua")
+if not ImGuiKeys then
+  print("[Pallas] Failed to load ImGui keys data, using fallback")
+  ImGuiKeys = {
+    get_key_name = function(key) return "Unknown (" .. tostring(key) .. ")" end,
+    COMMON_KEYS = {580} -- F9 as fallback
+  }
+end
+
 Menu = Menu or {}
 Menu.OptionMenus = {}
 Menu.Open = true
@@ -167,6 +176,45 @@ function Menu:Draw()
     if PallasSettings.PallasESP == nil then PallasSettings.PallasESP = true end
     local ch4, v4 = imgui.checkbox("Target ESP overlay##pallas_esp", PallasSettings.PallasESP)
     if ch4 then PallasSettings.PallasESP = v4 end
+
+    imgui.separator()
+    
+    -- Pause key selector
+    local current_key = PallasSettings.PallasPauseKey or 580
+    local key_name = ImGuiKeys.get_key_name(current_key)
+    imgui.text("Pause Toggle Key: " .. key_name)
+    
+    if imgui.button("Change Key##pause_key") then
+      -- Start key capture mode
+      Menu.CapturingKey = true
+      Menu.CaptureStartTime = os.clock()
+    end
+    
+    -- Key capture mode
+    if Menu.CapturingKey then
+      imgui.text("Press any key to set as pause toggle...")
+      imgui.text("(ESC to cancel)")
+      
+      -- Auto-cancel after 5 seconds
+      if os.clock() - (Menu.CaptureStartTime or 0) > 5 then
+        Menu.CapturingKey = false
+        imgui.text("Key capture timed out")
+      end
+      
+      -- Check for key presses
+      for _, key in ipairs(ImGuiKeys.COMMON_KEYS) do
+        if imgui.is_key_pressed(key) then
+          if key == 526 then -- ESC
+            Menu.CapturingKey = false
+          else
+            PallasSettings.PallasPauseKey = key
+            Menu.CapturingKey = false
+            print("[Pallas] Pause key set to: " .. ImGuiKeys.get_key_name(key))
+          end
+          break
+        end
+      end
+    end
   end
 
   if imgui.collapsing_header("Interrupts") then

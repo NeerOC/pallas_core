@@ -80,6 +80,11 @@ function Behavior:Initialize()
 end
 
 function Behavior:Update()
+  -- Don't run behaviors if paused
+  if PallasSettings.PallasPaused then
+    return
+  end
+  
   for _, k in pairs(BehaviorType) do
     if not self[k] then goto continue end
     for _, fn in ipairs(self[k]) do
