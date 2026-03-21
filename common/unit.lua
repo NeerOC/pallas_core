@@ -369,28 +369,34 @@ function Unit:CastingInfo()
 end
 
 -- Resolve the unit's target (returns a Unit wrapper or nil).
--- For the local player, uses game.target() to get the GUID/obj_ptr,
--- then looks up the full entity from the OM cache so we get position,
--- facing, auras, health, etc.  Falls back to the bare target table
--- if the entity isn't in the cache (e.g. cross-phase).
+-- For the local player, uses game.target() to get the GUID/obj_ptr.
+-- For any other unit, uses game.unit_target() to read the target from
+-- the CGUnit descriptor.  In both cases the result is looked up in the
+-- OM entity cache so the returned Unit has full data (position, auras, etc.).
 function Unit:GetTarget()
+  local tgt
   if Me and self.Guid == Me.Guid then
-    local ok, tgt = pcall(game.target)
-    if not ok or not tgt or not tgt.obj_ptr then
+    local ok, t = pcall(game.target)
+    if not ok or not t or not t.obj_ptr then
       return nil
     end
-
-    -- Look up full entity data from the OM snapshot
-    local entities = Pallas and Pallas._entity_cache or {}
-    for _, e in ipairs(entities) do
-      if e.obj_ptr == tgt.obj_ptr then
-        return Unit:New(e)
-      end
+    tgt = t
+  else
+    local ok, t = pcall(game.unit_target, self.obj_ptr)
+    if not ok or not t or not t.obj_ptr then
+      return nil
     end
-
-    return Unit:New(tgt)
+    tgt = t
   end
-  return nil
+
+  local entities = Pallas and Pallas._entity_cache or {}
+  for _, e in ipairs(entities) do
+    if e.obj_ptr == tgt.obj_ptr then
+      return Unit:New(e)
+    end
+  end
+
+  return Unit:New(tgt)
 end
 
 -- Check if this unit is a valid target
