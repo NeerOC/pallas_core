@@ -726,7 +726,9 @@ local function BloodDKCombat()
   end
 
   if use_aoe then
-    AoERotation(enemies)
+    if not AoERotation(enemies) then
+      SingleTarget(enemies)
+    end
   else
     SingleTarget(enemies)
   end

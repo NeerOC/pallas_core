@@ -489,6 +489,21 @@ local function UseDefensives()
   return false
 end
 
+--- Real cooldown remaining (ignores GCD — duration < 2s is just GCD).
+local function cd_remaining(spell)
+  if not spell.IsKnown then return -1 end
+  local cd = spell:GetCooldown()
+  if cd and cd.on_cooldown and (cd.duration or 0) > 2 then
+    return math.ceil(cd.remaining or 0)
+  end
+  return 0
+end
+
+--- True if a spell's own cooldown (not GCD) is ready.
+local function is_off_cooldown(spell)
+  return cd_remaining(spell) == 0
+end
+
 -- ── Burst CD management ─────────────────────────────────────────
 
 --- Use burst CDs: Gargoyle → Unholy Frenzy → ERW.
@@ -503,7 +518,7 @@ local function UseBurstCDs(enemies, target)
   -- Summon Gargoyle (attacks current target for 30s, scales dynamically)
   if S("UnholyUseGargoyle") then
     if PallasSettings.UnholySyncBurst then
-      if Spell.UnholyFrenzy:IsReady() then
+      if is_off_cooldown(Spell.UnholyFrenzy) then
         if Spell.SummonGargoyle:CastEx(target) then return true end
       end
     else
@@ -528,13 +543,6 @@ local function UseBurstCDs(enemies, target)
 end
 
 -- ── Burst HUD (ImGui window, drawn every frame) ─────────────────
-
-local function cd_remaining(spell)
-  if not spell.IsKnown then return -1 end
-  local cd = spell:GetCooldown()
-  if cd and cd.on_cooldown then return math.ceil(cd.remaining or 0) end
-  return 0
-end
 
 local function draw_burst_hud()
   if not Me then return end
@@ -811,7 +819,9 @@ local function UnholyDKCombat()
   end
 
   if use_aoe then
-    AoERotation(enemies)
+    if not AoERotation(enemies) then
+      SingleTarget(enemies)
+    end
   else
     SingleTarget(enemies)
   end
