@@ -219,6 +219,25 @@ function Plugin.onDraw()
         end
     end
 
+    imgui.separator()
+    imgui.text("Render State (outline_debug):")
+    local od = game.outline_debug()
+    if od then
+        imgui.text(string.format("  render_state ptr: 0x%X", od.render_state or 0))
+        for i = 0, 4 do
+            local s = od[i]
+            if s then
+                local lo = s.guid_lo or 0
+                local hi = s.guid_hi or 0
+                local has_guid = (lo ~= 0 or hi ~= 0) and "SET" or "EMPTY"
+                imgui.text(string.format("  [%d] %s: 0x%X|0x%X %s",
+                    i, s.name or "?", lo, hi, has_guid))
+            end
+        end
+    else
+        imgui.text("  outline_debug() returned nil!")
+    end
+
     imgui.end_window()
 end
 
