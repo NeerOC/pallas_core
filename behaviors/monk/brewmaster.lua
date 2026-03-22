@@ -9,7 +9,15 @@ local options = {
 local auras = { tiger_palm = 125359 }
 
 local function DoCombat()
+	if Me.HealthPct < 70 and Spell.Guard:CastEx(Me) then
+		return
+	end
+
 	if Spell.SpearHandStrike:Interrupt() then
+		return
+	end
+
+	if Me.HealthPct < 20 and Combat.Get and Spell.FortifyingBrew:CastEx(Me) then
 		return
 	end
 
@@ -23,10 +31,6 @@ local function DoCombat()
 	end
 
 	if not Me:IsAutoAttacking() and Me:StartAttack(target) then
-		return
-	end
-
-	if Me.HealthPct < 70 and Spell.Guard:CastEx(Me) then
 		return
 	end
 
@@ -58,11 +62,15 @@ local function DoCombat()
 		return
 	end
 
-	if (Spell.KegSmash:GetCooldown().remaining > 3 or Me.PowerPct > 90) and Spell.Jab:CastEx(target) then
-		return
+	local spellToUse = nil
+	local nearbyEnemies = Combat:GetEnemiesWithinDistance(8)
+	if (Spell.KegSmash:GetCooldown().remaining > 3 or Me.PowerPct > 90) and nearbyEnemies < 3 then
+		spellToUse = Spell.Jab
+	else
+		spellToUse = Spell.SpinningCraneKick
 	end
 
-	if Spell.TigerPalm:CastEx(target) then
+	if spellToUse and spellToUse:CastEx(target) then
 		return
 	end
 end
