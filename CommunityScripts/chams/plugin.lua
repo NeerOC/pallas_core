@@ -18,6 +18,15 @@ local DEFAULTS = {
 }
 
 local cfg = {}
+local debug_info = {
+    total_units = 0,
+    in_range = 0,
+    candidates = 0,
+    slots_written = 0,
+    type_counts = {},
+    last_error = nil,
+    outline_results = {},
+}
 
 function Plugin.onEnable()
     cfg = settings.load("CommunityScripts\\chams", DEFAULTS)
@@ -90,13 +99,22 @@ function Plugin.onTick()
     end
 
     local candidates = {}
+    local type_counts = {}
+    local total_units = 0
+    local in_range = 0
+
     for _, entity in ipairs(game.objects("Unit")) do
+        total_units = total_units + 1
         if entity.position then
             local d2 = dist_sq(pos, entity.position)
             if d2 <= max_dist_sq then
+                in_range = in_range + 1
                 local etype = classify_entity(entity, quest_creatures)
-                if etype and cfg[TYPE_SETTINGS[etype]] then
-                    candidates[#candidates + 1] = { obj_ptr = entity.obj_ptr, dist2 = d2 }
+                if etype then
+                    type_counts[etype] = (type_counts[etype] or 0) + 1
+                    if cfg[TYPE_SETTINGS[etype]] then
+                        candidates[#candidates + 1] = { obj_ptr = entity.obj_ptr, dist2 = d2, name = entity.name }
+                    end
                 end
             end
         end
@@ -105,9 +123,16 @@ function Plugin.onTick()
     table.sort(candidates, function(a, b) return a.dist2 < b.dist2 end)
 
     local n = math.min(#candidates, cfg.max_highlights)
+    local outline_results = {}
     for i = 1, n do
         local slot = 5 - i
-        game.outline_write(candidates[i].obj_ptr, slot)
+        local ok = game.outline_write(candidates[i].obj_ptr, slot)
+        outline_results[#outline_results + 1] = {
+            slot = slot,
+            name = candidates[i].name or "?",
+            dist = math.sqrt(candidates[i].dist2),
+            ok = ok,
+        }
     end
 
     -- e.g. if n=3, slots 4,3,2 are used; clear slots 1 and 0
@@ -115,6 +140,13 @@ function Plugin.onTick()
     for slot = lowest_used - 1, 0, -1 do
         game.outline_clear(slot)
     end
+
+    debug_info.total_units = total_units
+    debug_info.in_range = in_range
+    debug_info.candidates = #candidates
+    debug_info.slots_written = n
+    debug_info.type_counts = type_counts
+    debug_info.outline_results = outline_results
 end
 
 function Plugin.onDraw()
@@ -163,6 +195,29 @@ function Plugin.onDraw()
     if changed then cfg.max_highlights = val; dirty = true end
 
     if dirty then settings.save("CommunityScripts\\chams", cfg) end
+
+    imgui.separator()
+    imgui.text("Debug")
+    imgui.text(string.format("Total units: %d", debug_info.total_units))
+    imgui.text(string.format("In range: %d", debug_info.in_range))
+    imgui.text(string.format("Candidates (enabled types): %d", debug_info.candidates))
+    imgui.text(string.format("Slots written: %d", debug_info.slots_written))
+
+    if next(debug_info.type_counts) then
+        imgui.text("Types found in range:")
+        for etype, count in pairs(debug_info.type_counts) do
+            local enabled = cfg[TYPE_SETTINGS[etype]] and "ON" or "OFF"
+            imgui.text(string.format("  %s: %d [%s]", etype, count, enabled))
+        end
+    end
+
+    if #debug_info.outline_results > 0 then
+        imgui.text("Outline slots:")
+        for _, r in ipairs(debug_info.outline_results) do
+            imgui.text(string.format("  slot %d: %s (%.1fyd) %s",
+                r.slot, r.name, r.dist, r.ok and "OK" or "FAIL"))
+        end
+    end
 
     imgui.end_window()
 end
