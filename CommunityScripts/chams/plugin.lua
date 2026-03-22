@@ -20,14 +20,14 @@ local DEFAULTS = {
 local cfg = {}
 
 function Plugin.onEnable()
-    cfg = settings.load("chams", DEFAULTS)
+    cfg = settings.load("CommunityScripts\\chams", DEFAULTS)
 end
 
 function Plugin.onDisable()
     for i = 0, 4 do
         game.outline_clear(i)
     end
-    settings.save("chams", cfg)
+    settings.save("CommunityScripts\\chams", cfg)
 end
 
 local function dist_sq(a, b)
@@ -162,7 +162,7 @@ function Plugin.onDraw()
     changed, val = imgui.slider_int("Max Highlights", cfg.max_highlights, 1, 5)
     if changed then cfg.max_highlights = val; dirty = true end
 
-    if dirty then settings.save("chams", cfg) end
+    if dirty then settings.save("CommunityScripts\\chams", cfg) end
 
     imgui.end_window()
 end
