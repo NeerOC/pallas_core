@@ -67,16 +67,9 @@ function Unit:New(entity)
   o.HealthPct = o.MaxHealth > 0 and (o.Health / o.MaxHealth * 100) or 0
   o.PowerPct = o.MaxPower > 0 and (o.Power / o.MaxPower * 100) or 0
 
-  -- Combo points (powers slot 3, type 255)
-  o.ComboPoints = 0
-  if u.powers then
-    for _, p in ipairs(u.powers) do
-      if p.type == 255 then
-        o.ComboPoints = p.current or 0
-        break
-      end
-    end
-  end
+  -- Combo points (powers[3], type 255)
+  local cp = u.powers and u.powers[3]
+  o.ComboPoints = (cp and cp.type == 255) and cp.current or 0
 
   return o
 end
