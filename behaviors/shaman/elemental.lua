@@ -41,7 +41,7 @@ local function DoCombat()
 		return
 	end
 
-	if Spell.LightningBolt:CastEx(target, false, false, true) then
+	if Spell.LightningBolt:CastEx(target, { skipMoving = true }) then
 		return
 	end
 end

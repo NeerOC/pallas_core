@@ -67,7 +67,7 @@ local function DoHeal()
     return
   end
 
-  if lowest.HealthPct < 70 and Spell.SoothingMist:CastEx(lowest, false, true) then
+  if lowest.HealthPct < 70 and Spell.SoothingMist:CastEx(lowest, { skipFacing = true }) then
     return
   end
 end

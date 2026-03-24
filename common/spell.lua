@@ -207,10 +207,11 @@ end
 ---   Throttled (9)          → pending cast exists, stop ALL casts this tick
 ---   NotReady/OnCD (10,11)  → GCD rolling or system busy, try again next tick
 ---   Other failure          → hard fail, per-spell 1s backoff
-function SpellWrapper:CastEx(target, skipusable, skipfacing, skipmoving)
-  skipusable = skipusable or false
-  skipfacing = skipfacing or false
-  skipmoving = skipmoving or false
+function SpellWrapper:CastEx(target, opts)
+  if type(opts) ~= "table" then opts = {} end
+  local skipusable = opts.skipUsable or false
+  local skipfacing = opts.skipFacing or false
+  local skipmoving = opts.skipMoving or false
   if self.Id == 0 or not self.IsKnown then
     return false
   end
