@@ -418,18 +418,10 @@ function SpellWrapper:Interrupt(options)
   options = options or {}
   local players_only = options.playersOnly or false
   local custom_range = options.customRange
-  local los_check = options.losCheck ~= false -- default true
 
-  -- Check global interrupt mode setting (0=All, 1=Whitelist, 2=None)
   local mode = PallasSettings.PallasInterruptMode or 0
-  if mode == 2 then -- None mode
-    return false
-  end
-
-  -- Check if spell is ready and known
-  if not self:IsReady() then
-    return false
-  end
+  if mode == 2 then return false end
+  if not self:IsReady() then return false end
 
   -- Get spell range for distance checking
   local spell_range = custom_range
@@ -460,36 +452,28 @@ function SpellWrapper:Interrupt(options)
 
   for _, target in ipairs(targets) do
     if not target or target.IsDead then goto continue end
-    
-    -- Player-only filtering
     if players_only and not target.is_player then goto continue end
-    
-    -- Check if target is casting/channeling something interruptible
+
     local casting = false
     local spell_id = 0
     local confirmed_immune = false
     local cast_info = nil
 
-    -- Check casting status using game functions for accurate data
-    if target.obj_ptr then
-      local ok_cast, cast = pcall(game.unit_casting_info, target.obj_ptr)
-      if ok_cast and cast then
+    if target.CastingInfo then
+      local cast, chan = target:CastingInfo()
+      if cast then
         casting = true
-        spell_id = cast.spell_id or 0
+        spell_id = cast.spell_id or target.CastingSpellId or 0
         cast_info = cast
         if cast.not_interruptible then confirmed_immune = true end
-      else
-        local ok_chan, chan = pcall(game.unit_channel_info, target.obj_ptr)
-        if ok_chan and chan then
-          casting = true
-          spell_id = chan.spell_id or 0
-          cast_info = chan
-          if chan.not_interruptible then confirmed_immune = true end
-        end
+      elseif chan then
+        casting = true
+        spell_id = chan.spell_id or target.ChannelingSpellId or 0
+        cast_info = chan
+        if chan.not_interruptible then confirmed_immune = true end
       end
     end
 
-    -- Fallback to OM data if game functions fail
     if not casting then
       if target.IsCasting then
         casting = true
@@ -500,44 +484,19 @@ function SpellWrapper:Interrupt(options)
       end
     end
 
-    -- Skip if not casting or confirmed immune
     if not casting or confirmed_immune then goto continue end
 
-    -- Check if spell is in interrupts.lua (for All and Whitelist modes)
-    if interrupts then
-      local found_in_interrupts = false
-      for _, int_spell_id in pairs(interrupts) do
-        if type(int_spell_id) == "number" and int_spell_id == spell_id then
-          found_in_interrupts = true
-          break
-        end
+    -- Whitelist mode: only interrupt spells listed in interrupts.lua
+    if mode == 1 and interrupts then
+      local found = false
+      for _, id in pairs(interrupts) do
+        if type(id) == "number" and id == spell_id then found = true; break end
       end
-      
-      -- For All mode: interrupt everything in interrupts.lua
-      -- For Whitelist mode: only interrupt if in interrupts.lua
-      if mode == 0 and not found_in_interrupts then goto continue end -- All mode but must be in data file
-      if mode == 1 and not found_in_interrupts then goto continue end -- Whitelist mode
+      if not found then goto continue end
     end
 
-    -- Range check: either in spell range OR in melee range (melee range always works)
-    local in_range = false
     local distance = Me:GetDistance(target)
-    
-    -- Always allow interrupts in melee range
-    if Me:InMeleeRange(target) then
-      in_range = true
-    -- Otherwise check spell range
-    elseif distance <= spell_range then
-      in_range = true
-    end
-
-    if not in_range then goto continue end
-
-    -- Line of sight check
-    if los_check and Me.obj_ptr and target.obj_ptr then
-      local los_ok, los = pcall(game.is_visible, Me.obj_ptr, target.obj_ptr, 0x03)
-      if los_ok and not los then goto continue end
-    end
+    if not Me:InMeleeRange(target) and distance > spell_range then goto continue end
 
     -- Facing check for non-melee interrupts
     if not Me:InMeleeRange(target) and Me.obj_ptr and target.obj_ptr then
@@ -545,37 +504,29 @@ function SpellWrapper:Interrupt(options)
       if fok and not facing then goto continue end
     end
 
-    -- Advanced timing logic (optional enhancement)
+    -- Advanced timing logic
     local should_interrupt = true
     if cast_info and PallasSettings.PallasInterruptTiming then
-      local now = os.clock() * 1000 -- Convert to milliseconds
-      
-      if cast_info.cast_start and cast_info.cast_end then
-        -- For regular casts: check cast percentage
-        local cast_duration = cast_info.cast_end - cast_info.cast_start
-        local cast_remaining = cast_info.cast_end - now
-        local cast_pct_remaining = (cast_remaining / cast_duration) * 100
-        
-        local interrupt_pct = PallasSettings.PallasInterruptPercentage or 80
-        should_interrupt = cast_pct_remaining <= interrupt_pct
-      elseif cast_info.channel_start then
-        -- For channeled spells: use random delay (700ms ± 400ms)
-        local channel_time = now - cast_info.channel_start
-        local random_delay = 700 + (math.random() * 800 - 400) -- 300-1100ms range
-        should_interrupt = channel_time > random_delay
+      if cast_info.start_time and cast_info.end_time and cast_info.remaining then
+        local cast_duration = cast_info.end_time - cast_info.start_time
+        if cast_duration > 0 then
+          local elapsed = cast_duration - cast_info.remaining
+          if target.IsChanneling or (not target.IsCasting and cast_info.remaining < cast_duration * 0.5) then
+            local random_delay = (700 + (math.random() * 800 - 400)) / 1000
+            should_interrupt = elapsed > random_delay
+          else
+            local cast_pct_remaining = (cast_info.remaining / cast_duration) * 100
+            local interrupt_pct = PallasSettings.PallasInterruptPercentage or 80
+            should_interrupt = cast_pct_remaining <= interrupt_pct
+          end
+        end
       end
     end
 
     if not should_interrupt then goto continue end
 
     -- Prioritize current target, then nearest
-    local priority = 0
-    if current_target_guid and target.Guid == current_target_guid then
-      priority = -1000 -- Highest priority for current target
-    else
-      priority = distance -- Lower distance = higher priority
-    end
-
+    local priority = (current_target_guid and target.Guid == current_target_guid) and -1000 or distance
     if priority < best_distance then
       best_target = target
       best_distance = priority
@@ -584,7 +535,6 @@ function SpellWrapper:Interrupt(options)
     ::continue::
   end
 
-  -- If we found a target, try to interrupt
   if best_target then
     return self:CastEx(best_target)
   end
