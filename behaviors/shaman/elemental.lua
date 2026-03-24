@@ -10,7 +10,21 @@ local THUNDERSTORM_RANGE = 10
 local THUNDERSTORM_COUNT = 3
 
 local function DoCombat()
+		local lowest = Heal:GetLowestMember()
+	if not lowest then
+		return
+	end
+
+	if lowest.HealthPct < 50 then return end
+	if not Me:HasAura("Flametongue Weapon (Passive)") and Spell.FlametongueWeapon:CastEx(Me) then
+		return
+	end
+
 	if Me:IsCastingOrChanneling() then
+		return
+	end
+
+	if Spell.WindShear:Interrupt() then
 		return
 	end
 
@@ -46,7 +60,27 @@ local function DoCombat()
 	end
 end
 
+local function DoHeal()
+	if Me:IsCastingOrChanneling() then
+		return
+	end
+
+	if Spell:IsGCDActive() then
+		return
+	end
+
+	local lowest = Heal:GetLowestMember()
+	if not lowest then
+		return
+	end
+
+	if lowest.HealthPct < 80 and Spell.HealingSurge:CastEx(lowest) then
+		return
+	end
+end
+
 local behaviors = {
+	[BehaviorType.Heal] = DoHeal,
 	[BehaviorType.Combat] = DoCombat,
 }
 

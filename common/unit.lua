@@ -420,6 +420,28 @@ function Unit:GetDispellableDebuffs(types)
   return result
 end
 
+--- Returns true if the unit has any dispellable buff (helpful aura) of the given type(s).
+--- Used for offensive dispelling (purging enemy buffs).
+--- @param types number|table  Single dispel_type int or array of ints
+function Unit:HasDispellableBuff(types)
+  if type(types) == "number" then types = { types } end
+  local set = {}
+  for _, t in ipairs(types) do set[t] = true end
+
+  local auras = self.Auras
+  if auras then
+    for i = 1, #auras do
+      local a = auras[i]
+      if a.dispel_type and set[a.dispel_type] then
+        local flags = a.flags or 0
+        local helpful = math.floor(flags / 256) % 2 == 1
+        if helpful then return true end
+      end
+    end
+  end
+  return false
+end
+
 --- Returns true if the unit has any stealable (Magic) buff.
 function Unit:HasStealableBuff()
   local auras = self.Auras

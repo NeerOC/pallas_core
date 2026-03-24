@@ -38,6 +38,15 @@ local RESULT_NOT_READY = 10 -- spell system busy (GCD rolling, pending cast)
 local RESULT_ON_CD = 11 -- GCD or spell cooldown still active
 local RESULT_QUEUED = 12
 
+-- ── Dispel type constants ──────────────────────────────────────────
+DispelType = {
+  Magic   = 1,
+  Curse   = 2,
+  Disease = 3,
+  Poison  = 4,
+  Enrage  = 9,
+}
+
 local SpellWrapper = {}
 SpellWrapper.__index = SpellWrapper
 
@@ -212,23 +221,31 @@ function SpellWrapper:CastEx(target, opts)
   local skipusable = opts.skipUsable or false
   local skipfacing = opts.skipFacing or false
   local skipmoving = opts.skipMoving or false
+  local skiplos = opts.skipLos or false
+  local tname = target and target.Name or "self"
   if self.Id == 0 or not self.IsKnown then
+    print(string.format("[CastEx] %s → %s BLOCKED: not known (id=%d known=%s)", self.Name, tname, self.Id, tostring(self.IsKnown)))
     return false
   end
   if Pallas._tick_throttled then
+    print(string.format("[CastEx] %s → %s BLOCKED: tick throttled", self.Name, tname))
     return false
   end
 
   local now = os.clock()
-  if now < self._fail_until or now < self._cast_until then
+  if now < self._fail_until then
+    print(string.format("[CastEx] %s → %s BLOCKED: fail backoff (%.2fs left)", self.Name, tname, self._fail_until - now))
     return false
   end
-
-  
+  if now < self._cast_until then
+    print(string.format("[CastEx] %s → %s BLOCKED: cast throttle (%.2fs left)", self.Name, tname, self._cast_until - now))
+    return false
+  end
 
   if not skipusable then
     local ok, usable = pcall(game.is_usable_spell, self.Id)
     if ok and not usable then
+      print(string.format("[CastEx] %s → %s BLOCKED: not usable", self.Name, tname))
       return false
     end
   end
@@ -239,19 +256,22 @@ function SpellWrapper:CastEx(target, opts)
   -- Don't throttle the tick — other spells may still be castable.
   local cok, cd = pcall(game.spell_cooldown, self.Id)
   if cok and cd and cd.on_cooldown then
+    print(string.format("[CastEx] %s → %s BLOCKED: on cooldown", self.Name, tname))
     return false
   end
 
   -- Moving check: if spell has cast time and player is moving, return false
-  if not skipmoving and Me and Me.IsMoving then
+  if not skipmoving and Me:IsMoving() then
     local iok, info = pcall(game.get_spell_info, self.Id)
     if iok and info and info.cast_time and info.cast_time > 0 then
+      print(string.format("[CastEx] %s → %s BLOCKED: moving (cast_time=%.1f)", self.Name, tname, info.cast_time))
       return false
     end
   end
 
   -- Range check: skip if target is out of spell range.
   if target and target ~= Me and not self:InRange(target) then
+    print(string.format("[CastEx] %s → %s BLOCKED: out of range", self.Name, tname))
     return false
   end
 
@@ -259,13 +279,26 @@ function SpellWrapper:CastEx(target, opts)
   if not skipfacing and target and target ~= Me and Me and Me.obj_ptr and target.obj_ptr then
     local fok, facing = pcall(game.is_facing, Me.obj_ptr, target.obj_ptr)
     if fok and not facing then
+      print(string.format("[CastEx] %s → %s BLOCKED: not facing", self.Name, tname))
       return false
     end
   end
 
+  --[[
+  -- Line of sight check
+  if not skiplos and target and target ~= Me and Me and Me.obj_ptr and target.obj_ptr then
+    local lok, visible = pcall(game.is_visible, Me.obj_ptr, target.obj_ptr, 0x03)
+    if lok and not visible then
+      print(string.format("[CastEx] %s → %s BLOCKED: no line of sight", self.Name, tname))
+      return false
+    end
+  end--]]
+
+  print(string.format("[CastEx] %s → %s CASTING...", self.Name, tname))
   local code, desc = self:Cast(target)
 
   if code == RESULT_SUCCESS or code == RESULT_QUEUED then
+    print(string.format("[CastEx] %s → %s SUCCESS (code=%d desc=%s)", self.Name, tname, code, desc or ""))
     Pallas._last_cast = self.Name
     Pallas._last_cast_time = now
     Pallas._last_cast_tgt = target and target.Name or "self"
@@ -275,15 +308,18 @@ function SpellWrapper:CastEx(target, opts)
     self._cast_until = now + CAST_THROTTLE
     return true
   elseif code == RESULT_THROTTLED then
+    print(string.format("[CastEx] %s → %s RESULT: throttled (code=%d)", self.Name, tname, code))
     Pallas._tick_throttled = true
     return false
   elseif code == RESULT_NOT_READY or code == RESULT_ON_CD then
     -- GCD is rolling or spell system is busy — not a real failure.
     -- Stop trying more spells this tick (GCD applies to everything)
     -- but don't penalise this spell with a backoff.
+    print(string.format("[CastEx] %s → %s RESULT: not ready/GCD (code=%d desc=%s)", self.Name, tname, code, desc or ""))
     Pallas._tick_throttled = true
     return false
   else
+    print(string.format("[CastEx] %s → %s RESULT: FAILED (code=%d desc=%s)", self.Name, tname, code, desc or ""))
     self._fail_until = now + FAIL_BACKOFF
     Pallas._last_fail = self.Name
     Pallas._last_fail_time = now
@@ -365,18 +401,35 @@ function SpellWrapper:CastAtPos(x_or_entity, y, z)
   end
 end
 
---- Dispel: scan friendly targets for dispellable debuffs and cast on the best one.
---- @param dispel_types table  Array of dispel type ints this spell can remove
----                            (1=Magic, 2=Curse, 3=Disease, 4=Poison, 9=Enrage)
---- @param options table|nil   Optional: {maxRange=30, prioritizeTank=true}
+--- Dispel wrapper: scans friendly or enemy targets for dispellable auras.
+---
+--- Friendly (remove harmful debuffs from allies):
+---   Spell.Cleanse:Dispel(true, {DispelType.Poison, DispelType.Magic})
+---
+--- Offensive (remove helpful buffs from enemies):
+---   Spell.Purge:Dispel(false, {DispelType.Magic})
+---
+--- @param friendly boolean     true = dispel debuffs on friends, false = purge buffs on enemies
+--- @param dispel_types table   Array of DispelType values this spell can remove
+--- @param options table|nil    Optional: {maxRange=30, prioritizeTank=true, prioritizeSelf=true}
 --- Returns true if a dispel was cast, false otherwise.
-function SpellWrapper:Dispel(dispel_types, options)
+function SpellWrapper:Dispel(friendly, dispel_types, options)
   if not dispel_types or #dispel_types == 0 then return false end
+  if not self:IsReady() then return false end
+
   options = options or {}
   local max_range = options.maxRange or 30
-  local prioritize_tank = options.prioritizeTank ~= false
 
-  if not self:IsReady() then return false end
+  if friendly then
+    return self:_DispelFriendly(dispel_types, max_range, options)
+  else
+    return self:_DispelOffensive(dispel_types, max_range, options)
+  end
+end
+
+function SpellWrapper:_DispelFriendly(dispel_types, max_range, options)
+  local prioritize_tank = options.prioritizeTank ~= false
+  local prioritize_self = options.prioritizeSelf ~= false
 
   local candidates = {}
   local friends = Heal and Heal.PriorityList or {}
@@ -388,6 +441,7 @@ function SpellWrapper:Dispel(dispel_types, options)
       if d <= max_range and self:InRange(u) then
         local priority = 100 - u.HealthPct
         if prioritize_tank and u:IsTank() then priority = priority + 50 end
+        if prioritize_self and Me and u.Guid == Me.Guid then priority = priority + 30 end
         candidates[#candidates + 1] = { unit = u, priority = priority }
       end
     end
@@ -400,7 +454,8 @@ function SpellWrapper:Dispel(dispel_types, options)
       if c.unit.Guid == Me.Guid then dominated = true; break end
     end
     if not dominated then
-      local priority = 100 - Me.HealthPct + 30
+      local priority = 100 - Me.HealthPct
+      if prioritize_self then priority = priority + 30 end
       candidates[#candidates + 1] = { unit = Me, priority = priority }
     end
   end
@@ -409,6 +464,39 @@ function SpellWrapper:Dispel(dispel_types, options)
 
   table.sort(candidates, function(a, b) return a.priority > b.priority end)
   return self:CastEx(candidates[1].unit)
+end
+
+function SpellWrapper:_DispelOffensive(dispel_types, max_range, options)
+  local targets = Combat and Combat.Targets or {}
+  local current_target = Me and Me.Target or nil
+  local current_target_guid = current_target and not current_target.IsDead and current_target.Guid or nil
+
+  local best_target = nil
+  local best_priority = math.huge
+
+  for _, target in ipairs(targets) do
+    if not target or target.IsDead then goto continue end
+    if not target:HasDispellableBuff(dispel_types) then goto continue end
+
+    local distance = Me:GetDistance(target)
+    if distance > max_range then goto continue end
+    if not self:InRange(target) then goto continue end
+
+    -- Prioritize current target, then nearest
+    local priority = (current_target_guid and target.Guid == current_target_guid) and -1000 or distance
+    if priority < best_priority then
+      best_target = target
+      best_priority = priority
+    end
+
+    ::continue::
+  end
+
+  if best_target then
+    return self:CastEx(best_target)
+  end
+
+  return false
 end
 
 --- Enhanced interrupt function with advanced targeting and timing options.
