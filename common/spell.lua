@@ -222,20 +222,25 @@ function SpellWrapper:CastEx(target, opts)
   local skipfacing = opts.skipFacing or false
   local skipmoving = opts.skipMoving or false
   local skiplos = opts.skipLos or false
+  local dbg = self.Name == "Healing Surge" and target == Me
   if self.Id == 0 or not self.IsKnown then
+    if dbg then print("[HS-DBG] BLOCKED: not known (id=" .. self.Id .. " known=" .. tostring(self.IsKnown) .. ")") end
     return false
   end
   if Pallas._tick_throttled then
+    if dbg then print("[HS-DBG] BLOCKED: tick throttled") end
     return false
   end
 
   local now = os.clock()
   if now < self._fail_until or now < self._cast_until then
+    if dbg then print(string.format("[HS-DBG] BLOCKED: backoff/throttle (fail=%.2f cast=%.2f now=%.2f)", self._fail_until - now, self._cast_until - now, now)) end
     return false
   end
 
   if not skipusable then
     local ok, usable = pcall(game.is_usable_spell, self.Id)
+    if dbg then print("[HS-DBG] usable check: ok=" .. tostring(ok) .. " usable=" .. tostring(usable)) end
     if ok and not usable then
       return false
     end
@@ -246,6 +251,7 @@ function SpellWrapper:CastEx(target, opts)
   -- resource cost → always "usable" even when on CD).
   -- Don't throttle the tick — other spells may still be castable.
   local cok, cd = pcall(game.spell_cooldown, self.Id)
+  if dbg then print("[HS-DBG] cd check: ok=" .. tostring(cok) .. " on_cd=" .. tostring(cd and cd.on_cooldown)) end
   if cok and cd and cd.on_cooldown then
     return false
   end
@@ -254,12 +260,14 @@ function SpellWrapper:CastEx(target, opts)
   if not skipmoving and Me:IsMoving() then
     local iok, info = pcall(game.get_spell_info, self.Id)
     if iok and info and info.cast_time and info.cast_time > 0 then
+      if dbg then print("[HS-DBG] BLOCKED: moving (cast_time=" .. info.cast_time .. ")") end
       return false
     end
   end
 
   -- Range check: skip if target is out of spell range.
   if target and target ~= Me and not self:InRange(target) then
+    if dbg then print("[HS-DBG] BLOCKED: out of range") end
     return false
   end
 
@@ -267,6 +275,7 @@ function SpellWrapper:CastEx(target, opts)
   if not skipfacing and target and target ~= Me and Me and Me.obj_ptr and target.obj_ptr then
     local fok, facing = pcall(game.is_facing, Me.obj_ptr, target.obj_ptr)
     if fok and not facing then
+      if dbg then print("[HS-DBG] BLOCKED: not facing") end
       return false
     end
   end
@@ -275,11 +284,14 @@ function SpellWrapper:CastEx(target, opts)
   if not skiplos and target and target ~= Me and Me and Me.obj_ptr and target.obj_ptr then
     local lok, visible = pcall(game.is_visible, Me.obj_ptr, target.obj_ptr, 0x03)
     if lok and not visible then
+      if dbg then print("[HS-DBG] BLOCKED: no LOS") end
       return false
     end
   end
 
+  if dbg then print("[HS-DBG] all checks passed, calling Cast() target_ptr=" .. tostring(target and target.obj_ptr)) end
   local code, desc = self:Cast(target)
+  if dbg then print("[HS-DBG] Cast result: code=" .. tostring(code) .. " desc=" .. tostring(desc)) end
 
   if code == RESULT_SUCCESS or code == RESULT_QUEUED then
     Pallas._last_cast = self.Name
@@ -291,15 +303,18 @@ function SpellWrapper:CastEx(target, opts)
     self._cast_until = now + CAST_THROTTLE
     return true
   elseif code == RESULT_THROTTLED then
+    if dbg then print("[HS-DBG] RESULT: throttled") end
     Pallas._tick_throttled = true
     return false
   elseif code == RESULT_NOT_READY or code == RESULT_ON_CD then
     -- GCD is rolling or spell system is busy — not a real failure.
     -- Stop trying more spells this tick (GCD applies to everything)
     -- but don't penalise this spell with a backoff.
+    if dbg then print("[HS-DBG] RESULT: not ready/GCD (code=" .. code .. ")") end
     Pallas._tick_throttled = true
     return false
   else
+    if dbg then print("[HS-DBG] RESULT: FAILED (code=" .. tostring(code) .. " desc=" .. tostring(desc) .. ")") end
     self._fail_until = now + FAIL_BACKOFF
     Pallas._last_fail = self.Name
     Pallas._last_fail_time = now

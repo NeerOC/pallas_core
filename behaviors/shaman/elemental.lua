@@ -65,7 +65,7 @@ local function DoHeal()
 	local lowest = Heal:GetLowestMember()
 
 	-- Cancel Healing Surge if nobody needs healing
-	if Me.CastingSpellId == Spell.HealingSurge.Id and (not lowest or lowest.HealthPct > 90w) then
+	if Me.CastingSpellId == Spell.HealingSurge.Id and (not lowest or lowest.HealthPct > 90) then
 		Me:StopCasting()
 	end
 
