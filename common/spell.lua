@@ -523,6 +523,7 @@ function SpellWrapper:Interrupt(options)
     if players_only and not target.is_player then goto continue end
 
     local casting = false
+    local is_channel = false
     local spell_id = 0
     local confirmed_immune = false
     local cast_info = nil
@@ -534,8 +535,10 @@ function SpellWrapper:Interrupt(options)
         spell_id = cast.spell_id or target.CastingSpellId or 0
         cast_info = cast
         if cast.not_interruptible then confirmed_immune = true end
-      elseif chan then
+      end
+      if chan then
         casting = true
+        is_channel = true
         spell_id = chan.spell_id or target.ChannelingSpellId or 0
         cast_info = chan
         if chan.not_interruptible then confirmed_immune = true end
@@ -548,6 +551,7 @@ function SpellWrapper:Interrupt(options)
         spell_id = target.CastingSpellId or 0
       elseif target.IsChanneling then
         casting = true
+        is_channel = true
         spell_id = target.ChannelingSpellId or 0
       end
     end
@@ -579,9 +583,8 @@ function SpellWrapper:Interrupt(options)
         local cast_duration = cast_info.end_time - cast_info.start_time
         if cast_duration > 0 then
           local elapsed = cast_duration - cast_info.remaining
-          if target.IsChanneling or (not target.IsCasting and cast_info.remaining < cast_duration * 0.5) then
-            local random_delay = (700 + (math.random() * 800 - 400)) / 1000
-            should_interrupt = elapsed > random_delay
+          if is_channel or (not target.IsCasting and cast_info.remaining < cast_duration * 0.5) then
+            should_interrupt = true
           else
             local cast_pct_remaining = (cast_info.remaining / cast_duration) * 100
             local interrupt_pct = PallasSettings.PallasInterruptPercentage or 80

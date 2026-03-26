@@ -38,6 +38,11 @@ local function DoRotation()
     end
 
     -- Utility
+    local tank = Heal.Friends.Tanks[1]
+    if tank and not tank:HasAura("Earth Shield") and Spell.EarthShield:CastEx(tank) then
+        return
+    end
+
     if Spell.PurifySpirit:Dispel(true, { DispelType.Magic, DispelType.Curse }) then
         return
     end

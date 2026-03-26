@@ -68,12 +68,21 @@ function Heal:CollectTargets()
   end
 end
 
+-- Traceline flags: terrain (0x01) + buildings/WMO (0x02).
+local LOS_FLAGS = 0x03
+
 function Heal:ExclusionFilter()
   local keep = {}
   for _, u in ipairs(self.HealTargets) do
-    if u and not Me:CanAttack(u) then
-      keep[#keep + 1] = u
-    end
+    if not u then goto skip_ex end
+    if Me:CanAttack(u) then goto skip_ex end
+
+    -- Line-of-sight check
+    local los_ok, los = pcall(game.is_visible, Me.obj_ptr, u.obj_ptr, LOS_FLAGS)
+    if not los_ok or not los then goto skip_ex end
+
+    keep[#keep + 1] = u
+    ::skip_ex::
   end
   self.HealTargets = keep
 end
