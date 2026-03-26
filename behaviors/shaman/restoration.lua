@@ -3,20 +3,22 @@ local options = {
 
     Widgets = {
         { type = "header",   text = "General" },
-        { type = "slider",   uid = "RestoShamanDPSAboveHP",        text = "DPS Above Health %", default = 80,  min = 0,                                         max = 100 },
+        { type = "slider",   uid = "RestoShamanDPSAboveHP",        text = "DPS Above Health %",              default = 80,  min = 0,                                         max = 100 },
 
         { type = "header",   text = "Single Target Healing" },
-        { type = "slider",   uid = "RestoShamanHealingSurge",      text = "Healing Surge %",    default = 65,  min = 0,                                         max = 100 },
-        { type = "slider",   uid = "RestoShamanHealingWave",       text = "Healing Wave %",     default = 80,  min = 0,                                         max = 100 },
-        { type = "slider",   uid = "RestoShamanRiptide",           text = "Riptide %",          default = 90,  min = 0,                                         max = 100 },
+        { type = "slider",   uid = "RestoShamanHealingSurge",      text = "Healing Surge %",                 default = 65,  min = 0,                                         max = 100 },
+        { type = "slider",   uid = "RestoShamanHealingWave",       text = "Healing Wave %",                  default = 80,  min = 0,                                         max = 100 },
+        { type = "slider",   uid = "RestoShamanRiptide",           text = "Riptide %",                       default = 90,  min = 0,                                         max = 100 },
 
         { type = "header",   text = "AoE Healing" },
+        { type = "slider",   uid = "RestoShamanHSTCount",          text = "Healing Stream Totem - Members",  default = 3,   min = 1,                                         max = 5 },
+        { type = "slider",   uid = "RestoShamanHSTHealth",         text = "Healing Stream Totem - Health %", default = 80,  min = 0,                                         max = 100 },
 
         { type = "header",   text = "Utility" },
-        { type = "combobox", uid = "RestoShamanEarthShieldTarget", text = "Earth Shield",       default = 0,   options = { "Tank 1", "Tank 2", "Off" } },
-        { type = "checkbox", uid = "RestoShamanPurifySpirit",      text = "Purify Spirit",      default = true },
-        { type = "combobox", uid = "RestoShamanWeaponImbue",       text = "Weapon Imbue",       default = 0,   options = { "Flametongue", "Earthliving" } },
-        { type = "combobox", uid = "RestoShamanShieldBuff",        text = "Shield Buff",        default = 0,   options = { "Water Shield", "Lightning Shield" } },
+        { type = "combobox", uid = "RestoShamanEarthShieldTarget", text = "Earth Shield",                    default = 0,   options = { "Tank 1", "Tank 2", "Off" } },
+        { type = "checkbox", uid = "RestoShamanPurifySpirit",      text = "Purify Spirit",                   default = true },
+        { type = "combobox", uid = "RestoShamanWeaponImbue",       text = "Weapon Imbue",                    default = 0,   options = { "Flametongue", "Earthliving" } },
+        { type = "combobox", uid = "RestoShamanShieldBuff",        text = "Shield Buff",                     default = 0,   options = { "Water Shield", "Lightning Shield" } },
     },
 }
 
@@ -25,7 +27,7 @@ local function DoRotation()
 
     -- Cancel Healing Surge if nobody needs healing
     local surge_pct = PallasSettings.RestoShamanHealingSurge or 65
-    if Me.CastingSpellId == Spell.HealingSurge.Id and (not lowest or lowest.HealthPct > surge_pct) then
+    if (Me.CastingSpellId == Spell.HealingSurge.Id) and (not lowest or lowest.HealthPct > surge_pct) then
         Me:StopCasting()
     end
 
@@ -43,12 +45,23 @@ local function DoRotation()
 
     -- Single Target Healing
     if lowest then
-        local wave_pct = PallasSettings.RestoShamanHealingWave or 80
-        local riptide_pct = PallasSettings.RestoShamanRiptide or 90
-
         if lowest.HealthPct < surge_pct and Spell.HealingSurge:CastEx(lowest) then
             return
         end
+    end
+
+    -- AoE Healing
+    local hst_count = PallasSettings.RestoShamanHSTCount or 3
+    local hst_health = PallasSettings.RestoShamanHSTHealth or 80
+    local _, members_below = Heal:GetMembersBelow(hst_health)
+    if members_below >= hst_count and Spell.HealingStreamTotem:CastEx(Me) then
+        return
+    end
+
+    -- Single Target Healing (continued)
+    if lowest then
+        local wave_pct = PallasSettings.RestoShamanHealingWave or 80
+        local riptide_pct = PallasSettings.RestoShamanRiptide or 90
 
         if lowest.HealthPct < wave_pct and Spell.HealingWave:CastEx(lowest) then
             return

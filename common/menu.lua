@@ -250,8 +250,8 @@ function Menu:Draw()
       if PallasSettings.PallasInterruptPercentage == nil then PallasSettings.PallasInterruptPercentage = 80 end
       local pct_changed, pct_val = imgui.slider_int("Interrupt at %##pallas_interrupt_pct", PallasSettings.PallasInterruptPercentage, 10, 95)
       if pct_changed then PallasSettings.PallasInterruptPercentage = pct_val end
-      imgui.text("Interrupts casts when ≤" .. (PallasSettings.PallasInterruptPercentage or 80) .. "% complete")
-      imgui.text("Channels interrupted after random delay (700ms ± 400ms)")
+      imgui.text("Interrupts casts when >=" .. (PallasSettings.PallasInterruptPercentage or 80) .. "% elapsed")
+      imgui.text("Channels interrupted immediately")
     end
   end
 

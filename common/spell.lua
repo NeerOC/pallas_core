@@ -582,13 +582,12 @@ function SpellWrapper:Interrupt(options)
       if cast_info.start_time and cast_info.end_time and cast_info.remaining then
         local cast_duration = cast_info.end_time - cast_info.start_time
         if cast_duration > 0 then
-          local elapsed = cast_duration - cast_info.remaining
-          if is_channel or (not target.IsCasting and cast_info.remaining < cast_duration * 0.5) then
+          if is_channel then
             should_interrupt = true
           else
-            local cast_pct_remaining = (cast_info.remaining / cast_duration) * 100
+            local elapsed_pct = ((cast_duration - cast_info.remaining) / cast_duration) * 100
             local interrupt_pct = PallasSettings.PallasInterruptPercentage or 80
-            should_interrupt = cast_pct_remaining <= interrupt_pct
+            should_interrupt = elapsed_pct >= interrupt_pct
           end
         end
       end
