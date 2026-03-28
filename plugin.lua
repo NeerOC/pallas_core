@@ -108,6 +108,7 @@ local function load_modules()
   end
 
   include("common/spell.lua")
+  include("common/item.lua")
 
   local PetMod = include("common/pet.lua")
   if PetMod then
