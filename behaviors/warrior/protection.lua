@@ -4,8 +4,6 @@ local options = {
 	Widgets = {
 		{ type = "text",   text = "=== Offensive ===" },
 		{ type = "slider", uid = "ProtWarHeroicThrowDist", text = "Heroic Throw min distance", default = 15, min = 5, max = 30 },
-		{ type = "text",   text = "=== AoE ===" },
-		{ type = "slider", uid = "ProtWarThunderclapTargets", text = "Thunderclap min targets", default = 5, min = 1, max = 10 },
 	},
 }
 
@@ -30,6 +28,17 @@ local function DoCombat()
 	-- Last Stand — off-GCD, emergency defensive
 	if Me.HealthPct < 30 then
 		Spell.LastStand:CastEx(Me)
+	end
+
+	-- Disrupting Shout — off-GCD, AoE interrupt when 2+ nearby enemies are casting
+	local casters = 0
+	for _, enemy in ipairs(Combat.Targets) do
+		if not enemy.IsDead and Me:GetDistance(enemy) <= 10 and enemy:IsCastingOrChanneling() then
+			casters = casters + 1
+		end
+	end
+	if casters >= 2 then
+		Spell.DisruptingShout:CastEx(Me)
 	end
 
 	-- Pummel — interrupt casts
@@ -64,15 +73,24 @@ local function DoCombat()
 	-- 1. Impending Victory — heal when low
 	if Me.HealthPct < 50 and Spell.ImpendingVictory:CastEx(target) then return end
 
-	-- 2. Revenge
+	-- 2. Thunderclap — spread Deep Wounds when 3+ lack it, or 5+ enemies nearby
+	local nearby = 0
+	local no_wounds = 0
+	for _, enemy in ipairs(Combat.Targets) do
+		if not enemy.IsDead and Me:GetDistance(enemy) <= 8 then
+			nearby = nearby + 1
+			if not enemy:HasAura("Deep Wounds") then
+				no_wounds = no_wounds + 1
+			end
+		end
+	end
+	if (no_wounds >= 3 or nearby >= 5) and Spell.ThunderClap:CastEx(Me) then return end
+
+	-- 3. Revenge
 	if Spell.Revenge:CastEx(target) then return end
 
-	-- 2. Shield Slam
+	-- 4. Shield Slam
 	if Spell.ShieldSlam:CastEx(target) then return end
-
-	-- 2. Thunderclap — AoE when enough targets nearby
-	local tc_targets = PallasSettings.ProtWarThunderclapTargets or 5
-	if Combat:GetEnemiesWithinDistance(8) >= tc_targets and Spell.ThunderClap:CastEx(Me) then return end
 
 	-- 4. Execute — scan all nearby targets for executable enemies (needs >30% rage)
 	if Me.PowerPct > 30 then
