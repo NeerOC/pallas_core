@@ -48,8 +48,15 @@ function Unit:New(entity)
     IsChanneling = u.is_channeling or false,
     CastingSpellId = u.casting_spell_id or 0,
     CastingSpellName = u.casting_spell_name or "",
+    CastStart = u.cast_start or 0,
+    CastEnd = u.cast_end or 0,
     ChannelingSpellId = u.channeling_spell_id or 0,
     ChannelingSpellName = u.channeling_spell_name or "",
+    ChannelStart = u.channel_start or 0,
+    ChannelEnd = u.channel_end or 0,
+    NotInterruptible = u.not_interruptible or false,
+    CastTargetLo = u.cast_target_lo or 0,
+    CastTargetHi = u.cast_target_hi or 0,
     Auras = u.auras or {},
 
     -- Melee range fields (from CGUnit descriptors)
@@ -76,6 +83,19 @@ function Unit:New(entity)
   return o
 end
 
+--- Returns the Unit that this unit's current cast is targeting, or nil.
+function Unit:GetCastTarget()
+  if self.CastTargetLo == 0 and self.CastTargetHi == 0 then return nil end
+  local entities = game.objects()
+  if not entities then return nil end
+  for _, e in ipairs(entities) do
+    if e.guid_lo == self.CastTargetLo and e.guid_hi == self.CastTargetHi then
+      return Unit:New(e)
+    end
+  end
+  return nil
+end
+
 function Unit:IsCastingOrChanneling()
   -- OM snapshot is accurate for the local player (uses GetUnitSpellInfo).
   -- For the current target, also query the live game state as a fallback.
@@ -97,14 +117,13 @@ function Unit:IsCastingOrChanneling()
 end
 
 --- Resolve a WoW unit token for this unit (for game.unit_casting_info etc.).
---- Returns "player" for the local player, "target" for the current target, nil otherwise.
+--- Returns "player", "target", "focus", or the obj_ptr (which C++ resolves).
 function Unit:_UnitToken()
   if Me and self.Guid == Me.Guid then
     return "player"
   end
-  local ok, tgt = pcall(game.target)
-  if ok and tgt and tgt.guid == self.Guid then
-    return "target"
+  if self.obj_ptr then
+    return self.obj_ptr
   end
   return nil
 end
@@ -620,6 +639,118 @@ function Unit:GetTarget()
   end
 
   return Unit:New(tgt)
+end
+
+-- ── Crowd Control (UNIT_FIELD_FLAGS bit checks) ──
+-- Works on ANY visible unit (enemies, party members, self).
+-- C_LossOfControl only tracks the local player; unit flags are universal.
+
+local FLAG_SILENCED = 0x00002000
+local FLAG_PACIFIED = 0x00020000
+local FLAG_STUNNED  = 0x00040000
+local FLAG_DISARMED = 0x00200000
+local FLAG_CONFUSED = 0x00400000
+local FLAG_FLEEING  = 0x00800000
+local FLAG_CC_ANY   = bit.bor(FLAG_SILENCED, FLAG_PACIFIED, FLAG_STUNNED,
+                              FLAG_DISARMED, FLAG_CONFUSED, FLAG_FLEEING)
+
+function Unit:IsStunned()
+  return bit.band(self.UnitFlags, FLAG_STUNNED) ~= 0
+end
+
+function Unit:IsSilenced()
+  return bit.band(self.UnitFlags, FLAG_SILENCED) ~= 0
+end
+
+function Unit:IsPacified()
+  return bit.band(self.UnitFlags, FLAG_PACIFIED) ~= 0
+end
+
+function Unit:IsDisarmed()
+  return bit.band(self.UnitFlags, FLAG_DISARMED) ~= 0
+end
+
+function Unit:IsFeared()
+  return bit.band(self.UnitFlags, FLAG_FLEEING) ~= 0
+end
+
+function Unit:IsConfused()
+  return bit.band(self.UnitFlags, FLAG_CONFUSED) ~= 0
+end
+
+--- Returns true if the unit has ANY CC flag active (stun/silence/fear/confuse/disarm/pacify).
+function Unit:IsCrowdControlled()
+  return bit.band(self.UnitFlags, FLAG_CC_ANY) ~= 0
+end
+
+--- Returns true if the unit is incapacitated (stunned, feared, or confused).
+function Unit:IsIncapacitated()
+  return bit.band(self.UnitFlags, bit.bor(FLAG_STUNNED, FLAG_CONFUSED, FLAG_FLEEING)) ~= 0
+end
+
+-- ── Speed / Slow / Root ──
+-- Uses game.unit_speed() for dynamic per-unit speed (reflects buffs, slows, mounts).
+
+local BASE_RUN_SPEED = 7.0
+
+--- Returns currentSpeed, runSpeed, flightSpeed, swimSpeed (yd/s).
+function Unit:GetSpeed()
+  if not self.obj_ptr then return 0, 0, 0, 0 end
+  local ok, cur, run, flight, swim = pcall(game.unit_speed, self.obj_ptr)
+  if not ok then return 0, 0, 0, 0 end
+  return cur, run, flight, swim
+end
+
+--- Returns true if the unit's run speed is below base (7.0 yd/s).
+function Unit:IsSlowed()
+  local _, run = self:GetSpeed()
+  return run > 0 and run < BASE_RUN_SPEED
+end
+
+--- Returns the slow percentage (0-100). 0 = not slowed.
+function Unit:SlowPercent()
+  local _, run = self:GetSpeed()
+  if run <= 0 or run >= BASE_RUN_SPEED then return 0 end
+  return (1 - run / BASE_RUN_SPEED) * 100
+end
+
+--- Returns true if the unit is rooted (runSpeed == 0 but not stunned/feared/confused).
+function Unit:IsRooted()
+  local _, run = self:GetSpeed()
+  if run > 0 then return false end
+  return not self:IsStunned() and not self:IsFeared() and not self:IsConfused()
+end
+
+-- ── Loss of Control (local player only) ──
+-- C_LossOfControl tracks detailed CC info (spell, duration, school lockout)
+-- but only for the local player. Use the flag-based methods above for enemies.
+
+function Unit:LossOfControlCount()
+  if not self.obj_ptr then return 0 end
+  local ok, count = pcall(game.loss_of_control_count, self.obj_ptr)
+  return ok and count or 0
+end
+
+function Unit:GetLossOfControlEvents()
+  if not self.obj_ptr then return {} end
+  local ok, count = pcall(game.loss_of_control_count, self.obj_ptr)
+  if not ok or not count or count == 0 then return {} end
+  local events = {}
+  for i = 1, count do
+    local ok2, info = pcall(game.loss_of_control_info, self.obj_ptr, i)
+    if ok2 and info then
+      events[#events + 1] = info
+    end
+  end
+  return events
+end
+
+function Unit:IsSchoolLocked()
+  local events = self:GetLossOfControlEvents()
+  for _, ev in ipairs(events) do
+    if ev.locType == "SCHOOL_INTERRUPT" then return true, ev.lockoutSchool end
+  end
+  return false, 0
 end
 
 -- Check if this unit is a valid target

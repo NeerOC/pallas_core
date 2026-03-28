@@ -40,6 +40,21 @@ local options = {
 
 -- Combat rotation — called every tick while the combat system runs.
 -- Use Combat.BestTarget, Spell.XXX:CastEx(target), Me, etc.
+--
+-- Items:
+--   Item.Trinket1:Use()                   -- equipped slot alias
+--   Item.Healthstone:Use()                -- by name (PascalCase)
+--   Item:ById(76097):Use()                -- by item database ID
+--   Item:BySlot(13):IsReady()             -- equipped slot number
+--   item:IsReady() / :IsOnCooldown() / :CooldownRemaining()
+--
+-- Casting info (available on all units in snapshot):
+--   target.IsCasting / target.IsChanneling / target.NotInterruptible
+--   target.CastingSpellId / target.CastStart / target.CastEnd
+--
+-- Aura helpers:
+--   target:GetAuraByMe("Rend")            -- only auras cast by you
+--   aura.is_from_player                   -- true if cast by any player
 local function DoCombat()
   local target = Combat.BestTarget
   if not target then return end
@@ -48,6 +63,8 @@ local function DoCombat()
   -- Example priority:
   -- if Spell.MortalStrike:CastEx(target) then return end
   -- if Spell.Slam:CastEx(target) then return end
+  -- if Me.HealthPct < 40 and Item.Healthstone:Use() then return end
+  -- if Item.Trinket1:IsReady() then Item.Trinket1:Use() end
 end
 
 -- Heal logic (optional) — called every tick while the heal system runs.

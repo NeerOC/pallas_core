@@ -2,6 +2,8 @@
 
 Pallas is a general purpose PvE behavior script aimed to support all classes and specializations for Mists of Pandaria. PvP is not officially supported yet!
 
+API reference lives in the source files: `common/spell.lua`, `common/item.lua`, `common/unit.lua`, `common/player.lua`. See `behaviors/_template.lua` for a quick-start guide.
+
 ## Status (Mists of Pandaria)
 
 Not supported  
