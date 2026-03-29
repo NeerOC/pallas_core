@@ -36,6 +36,8 @@ local options = {
         { type = "checkbox", uid = "DiscPurify",            text = "Purify",                       default = true },
         { type = "checkbox", uid = "DiscStopCasting",       text = "Cancel overheals",             default = true },
         { type = "checkbox", uid = "DiscPWFort",             text = "Power Word: Fortitude",        default = true },
+        { type = "checkbox", uid = "DiscAngelicFeather",   text = "Angelic Feather",              default = true },
+        { type = "slider",   uid = "DiscFeatherDelay",     text = "Feather after moving (sec)",   default = 2,   min = 0,                                                max = 10 },
         { type = "combobox", uid = "DiscInnerBuff",         text = "Inner Buff",                   default = 0,   options = { "Inner Fire", "Inner Will", "Auto (mana)" } },
     },
 }
@@ -58,6 +60,7 @@ local auras = {
 local SPIRIT_SHELL_KEY = 550 -- ImGuiKey E
 local spirit_shell_queued = false
 local spirit_shell_key_down = false
+local moving_since = 0
 
 -- Find the friend unit we're currently casting on
 local function get_cast_target()
@@ -108,14 +111,24 @@ local function DoRotation()
         end
     end
 
+    -- Track movement duration
+    local now = game.game_time()
+    if Me:IsMoving() then
+        if moving_since == 0 then moving_since = now end
+    else
+        moving_since = 0
+    end
+
     if Me:IsCastingOrChanneling() then
         return
     end
 
     -- ── Off-GCD abilities ────────────────────────────────────────────
 
-    -- Angelic Feather: speed boost while moving
-    if Me:IsMoving() and not Me:HasAura(auras.angelic_feather) then
+    -- Angelic Feather: speed boost after moving for X seconds
+    if PallasSettings.DiscAngelicFeather ~= false and Me:IsMoving()
+        and not Me:HasAura(auras.angelic_feather)
+        and moving_since > 0 and (now - moving_since) >= (PallasSettings.DiscFeatherDelay or 2) then
         Spell.AngelicFeather:CastAtPos(Me)
     end
 
@@ -327,7 +340,7 @@ local function DoRotation()
     end
 
     -- ── Two Forms: revert Altered Form ────────────────────────────────
-    if Me:HasAura(auras.altered_form) and Spell.TwoForms:CastEx(Me) then
+    if not Me.InCombat and Me:HasAura(auras.altered_form) and Spell.TwoForms:CastEx(Me) then
         return
     end
 
