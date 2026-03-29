@@ -76,9 +76,15 @@ function Unit:New(entity)
   o.HealthPct = o.MaxHealth > 0 and (o.Health / o.MaxHealth * 100) or 0
   o.PowerPct = o.MaxPower > 0 and (o.Power / o.MaxPower * 100) or 0
 
-  -- Combo points (powers[3], type 255)
+  -- Combo points (powers[3])
   local cp = u.powers and u.powers[3]
-  o.ComboPoints = (cp and cp.type == 255) and cp.current or 0
+  o.ComboPoints = cp and cp.current or 0
+
+  -- Chi (powers[5])
+  local chi = u.powers and u.powers[5]
+  o.Chi = chi and chi.current or 0
+  o.MaxChi = chi and chi.max or 0
+
 
   return o
 end

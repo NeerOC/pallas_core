@@ -11,6 +11,7 @@ local options = {
         { type = "slider",   uid = "MWSurgingMist",         text = "Surging Mist %",                 default = 55,  min = 0,                                            max = 100 },
         { type = "slider",   uid = "MWEnvelopingMist",      text = "Enveloping Mist %",              default = 65,  min = 0,                                            max = 100 },
         { type = "slider",   uid = "MWRenewingMist",        text = "Renewing Mist %",                default = 95,  min = 0,                                            max = 100 },
+        { type = "slider",   uid = "MWHealingSphereHP",     text = "Healing Sphere %",               default = 50,  min = 0,                                            max = 100 },
 
         { type = "header",   text = "AoE Healing" },
         { type = "slider",   uid = "MWUpliftCount",         text = "Uplift - Members Below",         default = 3,   min = 1,                                            max = 10 },
@@ -54,7 +55,7 @@ local auras = {
     zen_sphere        = 124081,
 }
 
-local JADE_STATUE_KEY = 541 -- ImGuiKey LeftCtrl
+local JADE_STATUE_KEY = 550 -- ImGuiKey E key
 
 
 -- Find the friend unit we're currently casting/channeling on
@@ -72,8 +73,9 @@ local function DoRotation()
     if Me.IsMounted then return end
     if Me:IsDisabled() then return end
 
-    -- ── Jade Serpent Statue: hold Left Ctrl to place at player position
+    -- ── Jade Serpent Statue: hold E key to place at player position
     if imgui.is_key_pressed(JADE_STATUE_KEY) and Spell.SummonJadeSerpentStatue then
+        print("YES")
         Spell.SummonJadeSerpentStatue:CastAtPos(Me)
     end
 
@@ -134,6 +136,16 @@ local function DoRotation()
         end
     end
 
+    -- ── Off-GCD: Thunder Focus Tea (activate before GCD spells) ─────
+    if PallasSettings.MWUseThunderFocusTea ~= false and not Me:HasAura(auras.thunder_focus_tea) then
+        local tft_uplift_hp        = PallasSettings.MWTFTUpliftHP or 80
+        local tft_uplift_count     = PallasSettings.MWTFTUpliftCount or 3
+        local members_below_tft, _ = Heal:GetMembersBelow(tft_uplift_hp)
+        if #members_below_tft >= tft_uplift_count and Spell.ThunderFocusTea:CastEx(Me) then
+            return
+        end
+    end
+
     if Spell:IsGCDActive() then
         return
     end
@@ -147,8 +159,9 @@ local function DoRotation()
         end
     end
 
-    -- Healing Sphere: spam on critically low targets (no GCD, instant)
-    if lowest and lowest.HealthPct < 50 then
+    -- Healing Sphere: spam on critically low targets
+    local hs_pct = PallasSettings.MWHealingSphereHP or 50
+    if lowest and lowest.HealthPct < hs_pct then
         if Spell.HealingSphere:CastAtPos(lowest) then
             return
         end
@@ -162,27 +175,18 @@ local function DoRotation()
         return
     end
 
-    -- ── Chi Brew: instant Chi refill when starved before key spenders ─
-    if Spell.ChiBrew then
-        -- Only pop Chi Brew if we actually need to spend Chi soon
-        local need_uplift      = false
-        local need_enveloping  = false
+    -- ── Pre-compute AoE healing state (used by Chi Brew, TFT, Uplift) ─
+    local all_friends              = Heal.Friends and Heal.Friends.All or {}
+    local uplift_hp                = PallasSettings.MWUpliftHP or 85
+    local uplift_count             = PallasSettings.MWUpliftCount or 3
+    local members_below_uplift, _  = Heal:GetMembersBelow(uplift_hp)
+    local uplift_ready             = #members_below_uplift >= uplift_count
 
-        local uplift_hp        = PallasSettings.MWUpliftHP or 85
-        local uplift_count     = PallasSettings.MWUpliftCount or 3
-        local members_below, _ = Heal:GetMembersBelow(uplift_hp)
-        if #members_below >= uplift_count then
-            need_uplift = true
-        end
-
-        if lowest then
-            local env_pct = PallasSettings.MWEnvelopingMist or 65
-            if lowest.HealthPct < env_pct and not lowest:HasAura(auras.enveloping_mist) then
-                need_enveloping = true
-            end
-        end
-
-        if (need_uplift or need_enveloping) and Spell.ChiBrew:CastEx(Me) then
+    -- ── Chi Brew: pop when low mana, low tea stacks, and low Chi ─────
+    if Spell.ChiBrew and Me.Chi < 3 and Me.PowerPct < 60 then
+        local tea_aura = Me:GetAura(auras.mana_tea_stacks)
+        local tea_stacks = tea_aura and tea_aura.stacks or 0
+        if tea_stacks < 5 and Spell.ChiBrew:CastEx(Me) then
             return
         end
     end
@@ -191,7 +195,7 @@ local function DoRotation()
     if lowest then
         local vm_aura = Me:GetAura(auras.vital_mists)
         local vm_stacks = vm_aura and vm_aura.stacks or 0
-        if vm_stacks >= 5 and lowest.HealthPct < 90 then
+        if vm_stacks >= 5 and lowest.HealthPct < 90 and lowest:HasAura(auras.soothing_mist) then
             if Spell.SurgingMist:CastEx(lowest, { skipFacing = true }) then
                 return
             end
@@ -206,43 +210,21 @@ local function DoRotation()
         end
     end
 
-    -- ── Thunder Focus Tea: empower next Uplift or Surging Mist ─────
-    if PallasSettings.MWUseThunderFocusTea ~= false then
-        local tft_uplift_hp        = PallasSettings.MWTFTUpliftHP or 80
-        local tft_uplift_count     = PallasSettings.MWTFTUpliftCount or 3
-        local members_below_tft, _ = Heal:GetMembersBelow(tft_uplift_hp)
-
-        if Me:HasAura(auras.thunder_focus_tea) then
-            -- TFT is active: use Uplift for double healing, or Surging for free cast
-            if #members_below_tft >= tft_uplift_count and Spell.Uplift:CastEx(Me, { skipFacing = true }) then
-                return
-            end
-            -- Fallback: use on Surging Mist (free cast) for single target
-            if lowest and lowest.HealthPct < 70 then
-                if Spell.SurgingMist:CastEx(lowest, { skipFacing = true }) then
-                    return
-                end
-            end
-        else
-            -- Activate TFT when AoE healing is needed soon
-            if #members_below_tft >= tft_uplift_count and Spell.ThunderFocusTea:CastEx(Me) then
+    -- ── Thunder Focus Tea: consume buff on Uplift or Surging Mist ───
+    if Me:HasAura(auras.thunder_focus_tea) then
+        -- TFT Uplift: double healing on all Renewing Mist targets
+        if uplift_ready and Spell.Uplift:CastEx(Me, { skipFacing = true }) then
+            return
+        end
+        -- Fallback: free Surging Mist for single target (requires Soothing Mist)
+        if lowest and lowest.HealthPct < 70 and lowest:HasAura(auras.soothing_mist) then
+            if Spell.SurgingMist:CastEx(lowest, { skipFacing = true }) then
                 return
             end
         end
     end
 
-    -- ── Renewing Mist: keep on cooldown (generates Chi, Uplift target)
-    if lowest then
-        local renew_pct = PallasSettings.MWRenewingMist or 95
-        if lowest.HealthPct < renew_pct and not lowest:HasAura(auras.renewing_mist) then
-            if Spell.RenewingMist:CastEx(lowest, { skipFacing = true }) then
-                return
-            end
-        end
-    end
-
-    -- Also spread Renewing Mist to other injured members without it
-    local all_friends = Heal.Friends and Heal.Friends.All or {}
+    -- ── Renewing Mist: keep on cooldown (generates Chi, Uplift targets)
     local renew_pct = PallasSettings.MWRenewingMist or 95
     for _, f in ipairs(all_friends) do
         if f.HealthPct < renew_pct and not f:HasAura(auras.renewing_mist) then
@@ -252,11 +234,8 @@ local function DoRotation()
         end
     end
 
-    -- ── AoE Healing: Uplift ─────────────────────────────────────────
-    local uplift_hp               = PallasSettings.MWUpliftHP or 85
-    local uplift_count            = PallasSettings.MWUpliftCount or 3
-    local members_below_uplift, _ = Heal:GetMembersBelow(uplift_hp)
-    if #members_below_uplift >= uplift_count and Spell.Uplift:CastEx(Me, { skipFacing = true }) then
+    -- ── AoE Healing: Uplift (reuses pre-computed uplift state) ──────
+    if uplift_ready and Spell.Uplift:CastEx(Me, { skipFacing = true }) then
         return
     end
 
