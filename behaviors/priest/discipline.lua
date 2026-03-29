@@ -4,12 +4,13 @@ local options = {
     Widgets = {
         { type = "header",   text = "General" },
         { type = "slider",   uid = "DiscDPSAboveHP",        text = "DPS Above Health %",           default = 90,  min = 0,                                                max = 100 },
+        { type = "slider",   uid = "DiscDPSManaFloor",      text = "DPS Mana Floor %",             default = 30,  min = 0,                                                max = 100 },
 
         { type = "header",   text = "Single Target Healing" },
         { type = "slider",   uid = "DiscPenanceHP",         text = "Penance %",                    default = 60,  min = 0,                                                max = 100 },
         { type = "slider",   uid = "DiscFlashHealHP",       text = "Flash Heal %",                 default = 50,  min = 0,                                                max = 100 },
         { type = "slider",   uid = "DiscGreaterHealHP",     text = "Greater Heal %",               default = 45,  min = 0,                                                max = 100 },
-        { type = "slider",   uid = "DiscHealHP",            text = "Heal %",                       default = 85,  min = 0,                                                max = 100 },
+        { type = "slider",   uid = "DiscHealHP",            text = "Heal %",                       default = 75,  min = 0,                                                max = 100 },
         { type = "slider",   uid = "DiscBindingHealHP",     text = "Binding Heal %",               default = 40,  min = 0,                                                max = 100 },
         { type = "slider",   uid = "DiscBindingHealSelfHP", text = "Binding Heal Self %",          default = 70,  min = 0,                                                max = 100 },
         { type = "slider",   uid = "DiscRenewHP",           text = "Renew (moving only) %",        default = 50,  min = 0,                                                max = 100 },
@@ -17,7 +18,7 @@ local options = {
         { type = "header",   text = "Shielding" },
         { type = "checkbox", uid = "DiscPWSOnTargeted",     text = "PW:S allies being targeted",   default = true },
         { type = "checkbox", uid = "DiscPWSTank",           text = "PW:S tanks always",            default = true },
-        { type = "slider",   uid = "DiscPWSHP",             text = "PW:S Below Health %",          default = 90,  min = 0,                                                max = 100 },
+        { type = "slider",   uid = "DiscPWSHP",             text = "PW:S Below Health %",          default = 75,  min = 0,                                                max = 100 },
 
         { type = "header",   text = "AoE Healing" },
         { type = "slider",   uid = "DiscPoHCount",          text = "Prayer of Healing - Members",  default = 3,   min = 1,                                                max = 5 },
@@ -247,24 +248,21 @@ local function DoRotation()
             return
         end
 
-        -- Inner Focus + Flash Heal combo (free crit heal)
-        local flash_pct = PallasSettings.DiscFlashHealHP or 50
-        if lowest.HealthPct < flash_pct then
-            if not Me:HasAura(auras.inner_focus) and Spell.InnerFocus:CastEx(Me) then
-                return
-            end
-            if Spell.FlashHeal:CastEx(lowest, { skipFacing = true }) then
-                return
-            end
-        end
-
-        -- Inner Focus + Greater Heal combo
+        -- Inner Focus + Greater Heal combo (save Inner Focus for the big heal)
         local gheal_pct = PallasSettings.DiscGreaterHealHP or 45
         if lowest.HealthPct < gheal_pct then
             if not Me:HasAura(auras.inner_focus) and Spell.InnerFocus:CastEx(Me) then
                 return
             end
             if Spell.GreaterHeal:CastEx(lowest, { skipFacing = true }) then
+                return
+            end
+        end
+
+        -- Flash Heal (expensive, no Inner Focus — use only for urgent healing)
+        local flash_pct = PallasSettings.DiscFlashHealHP or 50
+        if lowest.HealthPct < flash_pct then
+            if Spell.FlashHeal:CastEx(lowest, { skipFacing = true }) then
                 return
             end
         end
@@ -353,9 +351,30 @@ local function DoRotation()
         end
     end
 
+    -- ── Mana cooldowns (before DPS gate so they always fire) ──────────
+
+    -- Shadowfiend / Mindbender for mana
+    if PallasSettings.DiscUseShadowfiend ~= false and Me.PowerPct < 80 then
+        local target = Combat.BestTarget
+        if target then
+            if Spell.Mindbender and Spell.Mindbender.IsKnown and Spell.Mindbender:CastEx(target) then
+                return
+            end
+            if Spell.Shadowfiend:CastEx(target) then
+                return
+            end
+        end
+    end
+
     -- ── Damage / Atonement (only when healing is comfortable) ────────
     local dps_above_hp = PallasSettings.DiscDPSAboveHP or 90
     if lowest and (lowest.HealthPct < dps_above_hp) then
+        return
+    end
+
+    -- Stop DPSing if mana is too low
+    local mana_floor = PallasSettings.DiscDPSManaFloor or 30
+    if Me.PowerPct < mana_floor then
         return
     end
 
@@ -374,19 +393,6 @@ local function DoRotation()
             if Spell.InnerFire:CastEx(Me) then return end
         elseif Me.PowerPct < 70 and not Me:HasAura(auras.inner_will) then
             if Spell.InnerWill:CastEx(Me) then return end
-        end
-    end
-
-    -- Shadowfiend / Mindbender for mana
-    if PallasSettings.DiscUseShadowfiend ~= false and Me.PowerPct < 80 then
-        local target = Combat.BestTarget
-        if target then
-            if Spell.Mindbender and Spell.Mindbender.IsKnown and Spell.Mindbender:CastEx(target) then
-                return
-            end
-            if Spell.Shadowfiend:CastEx(target) then
-                return
-            end
         end
     end
 
