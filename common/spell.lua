@@ -384,8 +384,8 @@ end
 --- Launcher, where the standard raycast-hook approach fails.
 ---
 --- Accepts either raw coordinates or an entity/Unit with a Position field:
----   Spell.SnakeTrap:CastAtPosLuaPath(target)          -- entity
----   Spell.SnakeTrap:CastAtPosLuaPath(10.0, 20.0, 5.0) -- raw x, y, z
+---   Spell.ExplosiveTrap:CastAtPosLuaPath(target)          -- entity
+---   Spell.ExplosiveTrap:CastAtPosLuaPath(10.0, 20.0, 5.0) -- raw x, y, z
 function SpellWrapper:CastAtPosLuaPath(x_or_entity, y, z)
   if self.Id == 0 or not self.IsKnown then
     return false
