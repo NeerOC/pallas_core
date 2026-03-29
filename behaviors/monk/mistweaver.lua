@@ -146,7 +146,7 @@ local function DoRotation()
             return
         end
     end
-    
+
     -- Healing Sphere: spam on critically low targets (no GCD, instant)
     if lowest and lowest.HealthPct < 50 then
         if Spell.HealingSphere:CastAtPos(lowest) then
@@ -324,16 +324,25 @@ local function DoRotation()
             end
         end
     else
-        -- Chi Burst: narrow line, heals friends and damages enemies
-        local CHI_BURST_CONE = 0.35
+        -- Chi Burst: line projectile, heals friends and damages enemies in path
+        local CHI_BURST_CONE = 0.15 -- tight cone (~8.5 degrees half-angle)
         if Spell.ChiBurst then
+            local enemies_hit = 0
             local friends_hit = 0
-            for _, f in ipairs(all_friends) do
-                if f.HealthPct < 90 and Me:GetDistance(f) <= 40 and Me:IsFacing(f, CHI_BURST_CONE) then
-                    friends_hit = friends_hit + 1
+            for _, e in ipairs(Combat.Targets or {}) do
+                if Me:GetDistance(e) <= 40 and Me:IsFacing(e, CHI_BURST_CONE) then
+                    enemies_hit = enemies_hit + 1
                 end
             end
-            if friends_hit >= 2 and Spell.ChiBurst:CastEx(Me) then
+            if enemies_hit >= 1 then
+                for _, f in ipairs(all_friends) do
+                    if f.HealthPct < 95 and Me:GetDistance(f) <= 40 and Me:IsFacing(f, CHI_BURST_CONE) then
+                        friends_hit = friends_hit + 1
+                        break
+                    end
+                end
+            end
+            if enemies_hit >= 1 and friends_hit >= 1 and Spell.ChiBurst:CastEx(Me) then
                 return
             end
         end
