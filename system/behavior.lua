@@ -12,6 +12,15 @@ BehaviorType = {
   Extra  = 5,
 }
 
+-- Ordered list for deterministic iteration (Heal -> Tank -> Combat -> Rest -> Extra)
+local BEHAVIOR_ORDER = {
+  BehaviorType.Heal,
+  BehaviorType.Tank,
+  BehaviorType.Combat,
+  BehaviorType.Rest,
+  BehaviorType.Extra,
+}
+
 Behavior = Behavior or {}
 Behavior.LoadedClass = ""
 Behavior.LoadedSpec  = ""
@@ -40,7 +49,7 @@ function Behavior:Initialize()
   print("[Pallas] Initialize Behaviors")
 
   -- Clear existing behavior slots and draw hook (previous spec may have set one)
-  for _, v in pairs(BehaviorType) do
+  for _, v in ipairs(BEHAVIOR_ORDER) do
     self[v] = {}
   end
   Pallas._behavior_draw = nil
@@ -68,7 +77,7 @@ function Behavior:Initialize()
   self:AddBehaviorFunction(behavior.Behaviors, BehaviorType.Extra)
 
   local loaded = 0
-  for _, v in pairs(BehaviorType) do
+  for _, v in ipairs(BEHAVIOR_ORDER) do
     if self[v] and #self[v] > 0 then
       loaded = loaded + #self[v]
     end
@@ -86,7 +95,7 @@ function Behavior:Update()
     return
   end
   
-  for _, k in pairs(BehaviorType) do
+  for _, k in ipairs(BEHAVIOR_ORDER) do
     if not self[k] then goto continue end
     for _, fn in ipairs(self[k]) do
       local ok, err = pcall(fn)

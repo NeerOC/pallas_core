@@ -54,7 +54,13 @@ function Tank:CollectTargets()
     if not eu then goto skip end
     if eu.is_dead then goto skip end
     if eu.health and eu.health <= 0 then goto skip end
-    if not eu.in_combat and not PallasSettings.PallasAttackOOC then goto skip end
+    if not eu.in_combat then
+      -- Only allow OOC units if they are the current target and AttackOOC is enabled
+      local is_current_target = Me.Target and Me.Target.Guid == e.guid
+      if not (PallasSettings.PallasAttackOOC and is_current_target) then
+        goto skip
+      end
+    end
 
     if mx and e.position then
       local dx = mx - e.position.x

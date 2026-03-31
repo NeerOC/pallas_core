@@ -99,7 +99,8 @@ function Heal:WeighFilter()
     local ok, roster = pcall(game.group_members)
     if ok and roster then
       for _, m in ipairs(roster) do
-        if m.guid_lo then members_set[m.guid_lo] = m end
+        if m.guid then members_set[m.guid] = m
+        elseif m.guid_lo then members_set[m.guid_lo] = m end
       end
     end
   end
@@ -109,7 +110,7 @@ function Heal:WeighFilter()
     local is_tank, is_dps, is_heal = false, false, false
 
     local is_me = Me and u.Guid == Me.Guid
-    local member = members_set[u.guid_lo]
+    local member = members_set[u.Guid] or members_set[u.guid_lo]
     if not member and not is_me then goto continue end
 
     if u:IsTank() then

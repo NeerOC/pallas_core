@@ -330,7 +330,7 @@ local function DoRotation()
 
     -- Resurrect current target if dead
     local myTarget = Me.Target
-    if myTarget and myTarget.IsDead and myTarget.isPlayer and Spell.Resurrection:CastEx(myTarget) then
+    if myTarget and myTarget.IsDead and myTarget.IsPlayer and Spell.Resurrection:CastEx(myTarget) then
         return
     end
 

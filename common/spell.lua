@@ -735,7 +735,7 @@ function SpellWrapper:Interrupt(options)
 
   for _, target in ipairs(targets) do
     if not target or target.IsDead then goto continue end
-    if players_only and not target.is_player then goto continue end
+    if players_only and not target.IsPlayer then goto continue end
 
     local casting = false
     local is_channel = false

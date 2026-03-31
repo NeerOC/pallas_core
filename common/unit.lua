@@ -521,7 +521,7 @@ function Unit:IsDPS()
 end
 
 function Unit:IsMoving()
-  local ok, moving = pcall(game.unit_is_moving)
+  local ok, moving = pcall(game.unit_is_moving, self.obj_ptr)
   if ok then return moving end
   return false
 end
@@ -806,7 +806,7 @@ function Unit:isUnitInCombatWithParty(unit)
   end
   
   for _, member in ipairs(party.members) do
-    if member and member.guid and not member.guid.equals(Me.guid) and member.guid.equals(target.Guid) then
+    if member and member.guid and member.guid ~= Me.Guid and member.guid == target.Guid then
       return true
     end
   end
