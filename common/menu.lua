@@ -79,7 +79,13 @@ local function draw_widget(w)
     local lo  = w.min or 0
     local hi  = w.max or 100
     local cur = PallasSettings[safe_uid] or w.default or lo
-    local changed, val = imgui.slider_int(label, cur, lo, hi)
+    local is_float = w.step or (lo % 1 ~= 0) or (hi % 1 ~= 0) or ((w.default or 0) % 1 ~= 0)
+    local changed, val
+    if is_float then
+      changed, val = imgui.slider_float(label, cur, lo, hi, w.format or "%.1f")
+    else
+      changed, val = imgui.slider_int(label, cur, lo, hi)
+    end
     if changed then PallasSettings[safe_uid] = val end
 
   elseif w.type == "combobox" then
@@ -132,6 +138,52 @@ local function draw_tab_settings()
   local ch5, v5 = imgui.checkbox("Always attack current target##pallas", PallasSettings.PallasAttackTarget)
   if ch5 then PallasSettings.PallasAttackTarget = v5 end
 
+  if PallasSettings.PallasForceTarget == nil then PallasSettings.PallasForceTarget = false end
+  local ch6, v6 = imgui.checkbox("Force target (skip range/facing/LOS)##pallas", PallasSettings.PallasForceTarget)
+  if ch6 then PallasSettings.PallasForceTarget = v6 end
+
+  imgui.spacing()
+  imgui.text_colored(0.4, 0.8, 1.0, 1.0, "Always Attack (name whitelist)")
+  imgui.separator()
+  imgui.text_colored(0.5, 0.5, 0.5, 1.0, "Attack these even if not in combat with us")
+
+  if not Menu._wl_input then Menu._wl_input = "" end
+  local wl_ch, wl_v = imgui.input_text("##wl_add", Menu._wl_input, 64)
+  Menu._wl_input = wl_v or Menu._wl_input
+  imgui.same_line(0, 4)
+  local wl_enter = wl_ch and imgui.is_key_pressed(525)  -- Enter key
+  if (imgui.button("Add##wl_add_btn") or wl_enter) and Menu._wl_input ~= "" then
+    local cur = PallasSettings.PallasAlwaysAttackList or ""
+    local entry = Menu._wl_input:match("^%s*(.-)%s*$")
+    if entry ~= "" then
+      if cur == "" then
+        PallasSettings.PallasAlwaysAttackList = entry
+      else
+        PallasSettings.PallasAlwaysAttackList = cur .. "," .. entry
+      end
+      Menu._wl_input = ""
+    end
+  end
+
+  local wl_raw = PallasSettings.PallasAlwaysAttackList or ""
+  if wl_raw ~= "" then
+    local entries = {}
+    for token in wl_raw:gmatch("[^,]+") do
+      local t = token:match("^%s*(.-)%s*$")
+      if t ~= "" then entries[#entries + 1] = t end
+    end
+    for idx, name in ipairs(entries) do
+      imgui.text("  " .. name)
+      imgui.same_line(0, 8)
+      if imgui.button("X##wl_rm" .. idx) then
+        table.remove(entries, idx)
+        PallasSettings.PallasAlwaysAttackList = table.concat(entries, ",")
+      end
+    end
+  else
+    imgui.text_colored(0.5, 0.5, 0.5, 1.0, "  (empty)")
+  end
+
   imgui.spacing()
   imgui.text_colored(0.4, 0.8, 1.0, 1.0, "Pause Key")
   imgui.separator()
@@ -164,6 +216,31 @@ local function draw_tab_settings()
         end
         break
       end
+    end
+  end
+
+  -- ── Hold-to-pause ───────────────────────────────────────────────
+  imgui.spacing()
+  imgui.text_colored(0.4, 0.8, 1.0, 1.0, "Hold-to-Pause")
+  imgui.separator()
+  imgui.text_colored(0.6, 0.6, 0.6, 1.0, "Hold a modifier key to pause the rotation")
+  imgui.text_colored(0.6, 0.6, 0.6, 1.0, "for manual casting. Releases instantly.")
+
+  if PallasSettings.PallasHoldToPause == nil then PallasSettings.PallasHoldToPause = true end
+  local htp_ch, htp_v = imgui.checkbox("Enable hold-to-pause##pallas_htp", PallasSettings.PallasHoldToPause)
+  if htp_ch then PallasSettings.PallasHoldToPause = htp_v end
+
+  if PallasSettings.PallasHoldToPause then
+    local names = Pallas.HOLD_PAUSE_NAMES or { "Left Alt" }
+    local cur_idx = PallasSettings.PallasHoldPauseKeyIdx or 0
+    local preview = names[cur_idx + 1] or "Left Alt"
+    if imgui.begin_combo("Modifier##pallas_htp_key", preview) then
+      for i, name in ipairs(names) do
+        if imgui.selectable(name .. "##htp" .. i, (i - 1) == cur_idx) then
+          PallasSettings.PallasHoldPauseKeyIdx = i - 1
+        end
+      end
+      imgui.end_combo()
     end
   end
 
