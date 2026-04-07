@@ -32,6 +32,56 @@ Pallas._last_fail_code = 0
 Pallas._last_fail_desc = ""
 Pallas._tick_throttled = false
 
+-- ── Hold-to-pause (FFI) ─────────────────────────────────────────
+-- Uses Win32 GetAsyncKeyState for real-time key-held detection.
+-- imgui.is_key_pressed only fires on the press edge — useless for
+-- "hold to suppress rotation" since it's true for one frame only.
+
+local ffi = require("ffi")
+local bit = require("bit")
+
+ffi.cdef[[
+  short GetAsyncKeyState(int vKey);
+]]
+local user32_ok, user32 = pcall(ffi.load, "user32")
+if not user32_ok then
+  console.warn("[Pallas] Failed to load user32.dll — hold-to-pause disabled")
+  user32 = nil
+end
+
+-- Virtual key codes for modifier keys (indexed 0-5 matching combobox)
+local HOLD_PAUSE_VK = {
+  [0] = 0xA4,  -- Left Alt
+  [1] = 0xA2,  -- Left Ctrl
+  [2] = 0xA0,  -- Left Shift
+  [3] = nil,   -- Ctrl+Shift (special: checks both)
+}
+
+Pallas.HOLD_PAUSE_NAMES = { "Left Alt", "Left Ctrl", "Left Shift", "Ctrl + Shift" }
+
+local VK_LCONTROL = 0xA2
+local VK_LSHIFT   = 0xA0
+
+--- Returns true if the hold-to-pause key is currently held down.
+local function IsHoldPaused()
+  if not user32 then return false end
+  if not PallasSettings.PallasHoldToPause then return false end
+  local idx = PallasSettings.PallasHoldPauseKeyIdx or 0
+
+  -- Ctrl+Shift combo: left Ctrl + left Shift both held
+  if idx == 3 then
+    local ctrl_held  = bit.band(user32.GetAsyncKeyState(VK_LCONTROL), 0x8000) ~= 0
+    local shift_held = bit.band(user32.GetAsyncKeyState(VK_LSHIFT), 0x8000) ~= 0
+    return ctrl_held and shift_held
+  end
+
+  local vk = HOLD_PAUSE_VK[idx]
+  if not vk then return false end
+  return bit.band(user32.GetAsyncKeyState(vk), 0x8000) ~= 0
+end
+
+Pallas.IsHoldPaused = IsHoldPaused
+
 -- ── Module loader ───────────────────────────────────────────────
 
 local BASE_DIR = (game.SCRIPTS_DIR or ".") .. "\\CommunityScripts\\pallas_core"
@@ -207,6 +257,8 @@ local CORE_DEFAULTS = {
   PallasSpellDebug   = false, -- Show spell debug window
   PallasForceTarget  = false, -- Skip range/facing/LOS on current target
   PallasAlwaysAttackList = "", -- Comma-separated partial names (case-insensitive)
+  PallasHoldToPause      = true,  -- Hold modifier key to pause rotation
+  PallasHoldPauseKeyIdx  = 0,     -- 0=Left Alt, 1=Left Ctrl, 2=Left Shift, 3=Ctrl+Shift
 }
 
 local function load_settings()
@@ -467,7 +519,7 @@ function Plugin.onTick()
   end
 
   -- Only run targeting and behaviors if not paused
-  if not PallasSettings.PallasPaused then
+  if not PallasSettings.PallasPaused and not IsHoldPaused() then
     -- Run the targeting pipelines
     Combat:Update()
     Heal:Update()
@@ -501,6 +553,18 @@ local function draw_esp()
       end
     end
     return -- Don't draw other ESP elements when paused
+  end
+
+  -- Draw "Manual Control" when hold-to-pause key is held
+  if IsHoldPaused() then
+    if Me and Me.Position then
+      local sx, sy = game.world_to_screen(Me.Position.x, Me.Position.y, Me.Position.z + 2.0)
+      if sx then
+        local col_yellow = imgui.color_u32(1.0, 0.85, 0.2, 1.0)
+        imgui.draw_text(sx - 60, sy - 10, col_yellow, "Manual Control")
+      end
+    end
+    return
   end
 
   if not PallasSettings.PallasESP then return end

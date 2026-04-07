@@ -219,6 +219,31 @@ local function draw_tab_settings()
     end
   end
 
+  -- ── Hold-to-pause ───────────────────────────────────────────────
+  imgui.spacing()
+  imgui.text_colored(0.4, 0.8, 1.0, 1.0, "Hold-to-Pause")
+  imgui.separator()
+  imgui.text_colored(0.6, 0.6, 0.6, 1.0, "Hold a modifier key to pause the rotation")
+  imgui.text_colored(0.6, 0.6, 0.6, 1.0, "for manual casting. Releases instantly.")
+
+  if PallasSettings.PallasHoldToPause == nil then PallasSettings.PallasHoldToPause = true end
+  local htp_ch, htp_v = imgui.checkbox("Enable hold-to-pause##pallas_htp", PallasSettings.PallasHoldToPause)
+  if htp_ch then PallasSettings.PallasHoldToPause = htp_v end
+
+  if PallasSettings.PallasHoldToPause then
+    local names = Pallas.HOLD_PAUSE_NAMES or { "Left Alt" }
+    local cur_idx = PallasSettings.PallasHoldPauseKeyIdx or 0
+    local preview = names[cur_idx + 1] or "Left Alt"
+    if imgui.begin_combo("Modifier##pallas_htp_key", preview) then
+      for i, name in ipairs(names) do
+        if imgui.selectable(name .. "##htp" .. i, (i - 1) == cur_idx) then
+          PallasSettings.PallasHoldPauseKeyIdx = i - 1
+        end
+      end
+      imgui.end_combo()
+    end
+  end
+
   -- ── Spec selector ───────────────────────────────────────────────
   if Me and Me._spec_options then
     imgui.spacing()
