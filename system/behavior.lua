@@ -24,6 +24,7 @@ local BEHAVIOR_ORDER = {
 Behavior = Behavior or {}
 Behavior.LoadedClass = ""
 Behavior.LoadedSpec  = ""
+Behavior.LoadedStem  = "" -- behavior file stem (e.g. arms vs arms_jane)
 
 function Behavior:Initialize()
   if not Me then return end
@@ -41,8 +42,14 @@ function Behavior:Initialize()
     return
   end
 
-  -- Skip reload if same class+spec
-  if self.LoadedClass == class_key and self.LoadedSpec == spec_name then
+  local spec_slug = spec_name:gsub("%s+", ""):lower()
+  local stem = Pallas.get_chosen_behavior_stem and Pallas.get_chosen_behavior_stem() or spec_slug
+  if not stem or stem == "" then
+    stem = spec_slug
+  end
+
+  -- Skip reload if same class+spec+behavior file
+  if self.LoadedClass == class_key and self.LoadedSpec == spec_name and self.LoadedStem == stem then
     return
   end
 
@@ -54,15 +61,15 @@ function Behavior:Initialize()
   end
   Pallas._behavior_draw = nil
 
-  -- Build path: behaviors/<class>/<spec>.lua
-  local spec_file = spec_name:gsub("%s+", ""):lower()
-  local rel_path  = "behaviors/" .. class_key .. "/" .. spec_file .. ".lua"
+  -- Build path: behaviors/<class>/<stem>.lua (stem is spec or spec_suffix)
+  local rel_path  = "behaviors/" .. class_key .. "/" .. stem .. ".lua"
   local behavior  = Pallas.include(rel_path)
 
   if not behavior then
     print(string.format("[Pallas] No behavior file found: %s", rel_path))
     self.LoadedClass = ""
     self.LoadedSpec  = ""
+    self.LoadedStem  = ""
     return
   end
 
@@ -85,8 +92,10 @@ function Behavior:Initialize()
 
   self.LoadedClass = class_key
   self.LoadedSpec  = spec_name
-  print(string.format("[Pallas] Loaded %d behaviors for %s %s",
-    loaded, Me._class_name or "?", spec_name))
+  self.LoadedStem  = stem
+  local stem_note = (stem ~= spec_slug) and string.format(" [%s]", stem) or ""
+  print(string.format("[Pallas] Loaded %d behaviors for %s %s%s",
+    loaded, Me._class_name or "?", spec_name, stem_note))
 end
 
 function Behavior:Update()
