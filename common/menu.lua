@@ -260,9 +260,46 @@ local function draw_tab_settings()
         if imgui.selectable(name .. "##spec" .. i, (i - 1) == cur) then
           PallasSettings.PallasSpecIdx = i - 1
           PallasSettings.PallasSpecName = name
+          if Pallas.invalidate_behavior_variant_cache then
+            Pallas.invalidate_behavior_variant_cache()
+          end
         end
       end
       imgui.end_combo()
+    end
+
+    -- Multiple behavior scripts per spec: <spec>.lua plus <spec>_<suffix>.lua
+    if Pallas.refresh_behavior_variant_cache then
+      Pallas.refresh_behavior_variant_cache()
+    end
+    local variants = Pallas._behavior_variants
+    local vk = Pallas._behavior_variant_cache_key
+    if variants and #variants > 1 and vk then
+      imgui.spacing()
+      imgui.text_colored(0.4, 0.8, 1.0, 1.0, "Behavior implementation")
+      imgui.separator()
+      imgui.text_colored(0.5, 0.5, 0.5, 1.0,
+        "Add optional scripts alongside the default, e.g. arms_contrib.lua")
+      if type(PallasSettings.PallasBehaviorBySpec) ~= "table" then
+        PallasSettings.PallasBehaviorBySpec = {}
+      end
+      local cur_stem = (Pallas.get_chosen_behavior_stem and Pallas.get_chosen_behavior_stem()) or variants[1].stem
+      local preview_label = cur_stem
+      for _, v in ipairs(variants) do
+        if v.stem == cur_stem then
+          preview_label = (v.label == "Default") and "Default" or (v.label .. "  [" .. v.stem .. "]")
+          break
+        end
+      end
+      if imgui.begin_combo("Script##pallas_beh_impl", preview_label) then
+        for _, v in ipairs(variants) do
+          local row = (v.label == "Default") and "Default" or (v.label .. "  [" .. v.stem .. "]")
+          if imgui.selectable(row .. "##behvar" .. v.stem, v.stem == cur_stem) then
+            PallasSettings.PallasBehaviorBySpec[vk] = v.stem
+          end
+        end
+        imgui.end_combo()
+      end
     end
   end
 end

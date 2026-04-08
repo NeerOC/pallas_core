@@ -20,6 +20,11 @@
 --
 -- Behavior files are loaded from:
 --   behaviors/<ClassName:lower():nospaces>/<SpecName:lower():nospaces>.lua
+--
+-- Multiple implementations for the same spec (e.g. community forks):
+--   behaviors/<class>/<spec>_<suffix>.lua
+-- Example: warrior/arms.lua (Default) and warrior/arms_jane.lua
+-- Pick the script in Pallas → Settings → Specialization → Behavior implementation.
 -- ═══════════════════════════════════════════════════════════════════
 
 -- ── Menu options shown in the Pallas window ─────────────────────

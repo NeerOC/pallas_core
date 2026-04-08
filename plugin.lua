@@ -104,6 +104,136 @@ end
 -- Expose the loader globally so system/behavior.lua can load behavior files.
 Pallas.include = include
 
+-- ── Behavior variants (multiple implementations per spec) ───────
+-- Files: behaviors/<class>/<spec>.lua (default) and
+--        behaviors/<class>/<spec>_<suffix>.lua (e.g. arms_jane.lua).
+-- Discovery uses Windows "dir /b" via io.popen; falls back to probing the
+-- canonical file if listing is unavailable.
+
+Pallas._behavior_variant_cache_key = nil
+Pallas._behavior_variants = nil
+
+local function list_behavior_variants_impl(class_key, spec_slug)
+  local results = {}
+  local seen = {}
+  local function add_stem(stem)
+    if seen[stem] then return end
+    seen[stem] = true
+    results[#results + 1] = stem
+  end
+
+  local function consider_filename(name)
+    if not name or name == "" then return end
+    name = name:match("^%s*(.-)%s*$") or name
+    if not name:lower():match("%.lua$") then return end
+    local stem = name:sub(1, -5)
+    if stem == "_template" or stem:sub(1, 1) == "_" then return end
+    if stem == spec_slug then
+      add_stem(stem)
+      return
+    end
+    local prefix = spec_slug .. "_"
+    if stem:sub(1, #prefix) == prefix then
+      add_stem(stem)
+    end
+  end
+
+  local abs_dir = (BASE_DIR .. "\\behaviors\\" .. class_key):gsub("/", "\\")
+  local wild = abs_dir .. "\\" .. spec_slug .. "*.lua"
+  local p = io.popen('cmd /c dir /b "' .. wild .. '" 2>nul', "r")
+  if p then
+    for line in p:lines() do
+      consider_filename(line)
+    end
+    p:close()
+  end
+
+  if #results == 0 then
+    local f = io.open(abs_dir .. "\\" .. spec_slug .. ".lua", "r")
+    if f then
+      f:close()
+      add_stem(spec_slug)
+    end
+  end
+
+  table.sort(results, function(a, b)
+    if a == spec_slug and b ~= spec_slug then return true end
+    if b == spec_slug and a ~= spec_slug then return false end
+    return a < b
+  end)
+
+  local out = {}
+  for _, stem in ipairs(results) do
+    local label
+    if stem == spec_slug then
+      label = "Default"
+    else
+      label = stem:sub(#spec_slug + 2) or stem
+    end
+    out[#out + 1] = { stem = stem, label = label }
+  end
+  return out
+end
+
+function Pallas.list_behavior_variants(class_key, spec_slug)
+  if not class_key or class_key == "" or not spec_slug or spec_slug == "" then
+    return {}
+  end
+  return list_behavior_variants_impl(class_key, spec_slug)
+end
+
+function Pallas.invalidate_behavior_variant_cache()
+  Pallas._behavior_variant_cache_key = nil
+end
+
+function Pallas.refresh_behavior_variant_cache()
+  if not Me or not Me._class_key or Me._class_key == "" then
+    Pallas._behavior_variants = {}
+    Pallas._behavior_variant_cache_key = nil
+    return
+  end
+  local spec_name = Me.SpecName
+  if not spec_name or spec_name == "" then
+    spec_name = PallasSettings.PallasSpecName or ""
+  end
+  local slug = spec_name:gsub("%s+", ""):lower()
+  if slug == "" then
+    Pallas._behavior_variants = {}
+    Pallas._behavior_variant_cache_key = nil
+    return
+  end
+  local key = Me._class_key .. "/" .. slug
+  if key == Pallas._behavior_variant_cache_key and Pallas._behavior_variants then
+    return
+  end
+  Pallas._behavior_variant_cache_key = key
+  Pallas._behavior_variants = list_behavior_variants_impl(Me._class_key, slug)
+end
+
+function Pallas.get_chosen_behavior_stem()
+  Pallas.refresh_behavior_variant_cache()
+  local variants = Pallas._behavior_variants
+  if not variants or #variants == 0 then
+    return nil
+  end
+  local key = Pallas._behavior_variant_cache_key
+  if not key then
+    return variants[1].stem
+  end
+  if type(PallasSettings.PallasBehaviorBySpec) ~= "table" then
+    PallasSettings.PallasBehaviorBySpec = {}
+  end
+  local saved = PallasSettings.PallasBehaviorBySpec[key]
+  if saved then
+    for i = 1, #variants do
+      if variants[i].stem == saved then
+        return saved
+      end
+    end
+  end
+  return variants[1].stem
+end
+
 -- ── Settings persistence ────────────────────────────────────────
 
 PallasSettings = PallasSettings or {}
@@ -128,7 +258,7 @@ local CORE_DEFAULTS = {
   PallasForceTarget  = false, -- Skip range/facing/LOS on current target
   PallasAlwaysAttackList = "", -- Comma-separated partial names (case-insensitive)
   PallasHoldToPause      = true,  -- Hold modifier key to pause rotation
-  PallasHoldPauseKeyIdx  = 0,     -- 0=Left Alt, 1=Right Alt, 2=Left Ctrl, etc.
+  PallasHoldPauseKeyIdx  = 0,     -- 0=Left Alt, 1=Left Ctrl, 2=Left Shift, 3=Ctrl+Shift
 }
 
 local function load_settings()
@@ -137,6 +267,9 @@ local function load_settings()
   local saved = settings_mod.load(SETTINGS_KEY) or {}
   for k, v in pairs(CORE_DEFAULTS) do
     if saved[k] == nil then saved[k] = v end
+  end
+  if type(saved.PallasBehaviorBySpec) ~= "table" then
+    saved.PallasBehaviorBySpec = {}
   end
   PallasSettings = saved
 end
@@ -360,12 +493,22 @@ function Plugin.onTick()
   refresh_me()
   if not Me then return end
 
-  -- Re-initialize behavior if spec changed (detected or manual override)
+  -- Re-initialize behavior if spec or chosen behavior variant changed
   local live_spec = Me.SpecName
   if not live_spec or live_spec == "" then
     live_spec = PallasSettings.PallasSpecName or ""
   end
-  if live_spec ~= "" and live_spec ~= Behavior.LoadedSpec then
+  local chosen_stem = ""
+  if Pallas.get_chosen_behavior_stem then
+    chosen_stem = Pallas.get_chosen_behavior_stem() or ""
+  end
+  local loaded_stem = Behavior.LoadedStem or ""
+  local live_class = Me._class_key or ""
+  if live_spec ~= "" and (
+      live_spec ~= Behavior.LoadedSpec
+      or chosen_stem ~= loaded_stem
+      or live_class ~= (Behavior.LoadedClass or "")
+    ) then
     Menu:Initialize()
     Behavior:Initialize()
   end
