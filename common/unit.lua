@@ -252,7 +252,10 @@ function Unit:HasAura(name_or_id)
     for i = 1, #auras do
       if aura_matches(auras[i], name_or_id) then return true end
     end
-    return false
+    -- Snapshot didn't contain the aura — fall through to live API.
+    -- The snapshot can miss recently applied buffs (especially self-cast
+    -- buffs like seals, blessings, Hand of Freedom) because it's only
+    -- refreshed once per tick from game.objects().
   end
   local ok, result = pcall(game.has_aura, self.obj_ptr, name_or_id)
   return ok and result or false
