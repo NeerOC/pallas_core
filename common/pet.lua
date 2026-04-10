@@ -36,6 +36,16 @@
 ---   Pet.SummonedBy(cgunit)      → guid_lo, guid_hi (+0x11BC0)
 ---   Pet.CreatedBy(cgunit)       → guid_lo, guid_hi (+0x11BB0)
 ---   Pet.IsOwnedByPlayer(cgunit) → bool
+---
+---   -- Pet control (bar-position independent) --
+---   Pet.Attack()                → bool (command pet to attack target)
+---   Pet.Follow()                → bool (command pet to follow player)
+---   Pet.Assist()                → bool (set assist stance)
+---   Pet.Defensive()             → bool (set defensive stance)
+---   Pet.Passive()               → bool (set passive stance)
+---   Pet.Dismiss()               → bool (dismiss the pet)
+---   Pet.MoveTo(x, y, z)         → bool (move pet to world position)
+---   Pet.CastBarSlot(slot)       → bool (fire pet bar slot 1–10)
 --- ═══════════════════════════════════════════════════════════════════
 
 local Pet = {}
@@ -293,6 +303,78 @@ function Pet.InvalidateCache()
   _cache = nil
   _pets_cache = nil
   _summons_cache = nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Pet Control (bar-position independent, synthetic action data)
+--
+-- These use the game's own PetAttack/PetFollow/etc. action values,
+-- so they work regardless of how the player has arranged their pet bar.
+-- ═══════════════════════════════════════════════════════════════════
+
+--- Command the pet to attack the current target.
+--- @return boolean  true if the command was queued.
+function Pet.Attack()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "attack")
+  return ok and r == true
+end
+
+--- Command the pet to follow the player.
+function Pet.Follow()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "follow")
+  return ok and r == true
+end
+
+--- Set the pet to Assist stance.
+function Pet.Assist()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "assist")
+  return ok and r == true
+end
+
+--- Set the pet to Defensive stance.
+function Pet.Defensive()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "defensive")
+  return ok and r == true
+end
+
+--- Set the pet to Passive stance.
+function Pet.Passive()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "passive")
+  return ok and r == true
+end
+
+--- Dismiss the pet.
+function Pet.Dismiss()
+  if type(game.pet_action) ~= "function" then return false end
+  local ok, r = pcall(game.pet_action, "dismiss")
+  return ok and r == true
+end
+
+--- Move the pet to a world position (Y = vertical in WoW).
+--- Bypasses the targeting cursor; sends the command directly.
+--- @param x number  world X
+--- @param y number  world Y (vertical)
+--- @param z number  world Z
+--- @return boolean  true if the command was queued.
+function Pet.MoveTo(x, y, z)
+  if type(game.pet_move_to) ~= "function" then return false end
+  local ok, r = pcall(game.pet_move_to, x, y, z)
+  return ok and r == true
+end
+
+--- Fire a pet action bar slot by 1-based index (for abilities).
+--- Use this for pet spellbook abilities that live in specific bar slots.
+--- @param slot number  1–10 (CastPetAction convention)
+--- @return boolean  true if the command was queued.
+function Pet.CastBarSlot(slot)
+  if type(game.cast_pet_bar_slot) ~= "function" then return false end
+  local ok, r = pcall(game.cast_pet_bar_slot, slot)
+  return ok and r == true
 end
 
 return Pet
